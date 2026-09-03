@@ -129,7 +129,7 @@ claude mcp add --transport http --scope user agent-game-table-remote https://gam
 
 ### TLS 與公開部署
 
-Node process 預設只監聽 loopback，應由 Caddy、nginx、Cloudflare Tunnel 或同等 reverse proxy 終止 TLS。Proxy 必須保留正確的 `Host`，限制 request body／連線數並設定速率限制；`wait_for_table_event` 最長 25 秒，仍應限制每個來源的並行連線。不要讓 Agent 執行環境取得 Remote Host 的狀態檔、`AGENT_GAME_TABLE_STATE_KEY`、靜態 key 檔或服務帳號權限，否則任何應用層雙盲都無法阻止它直接讀取伺服器秘密。
+Node process 預設只監聽 loopback，應由 Caddy、nginx、Cloudflare Tunnel 或同等 reverse proxy 終止 TLS。Proxy 必須保留正確的 `Host`，限制 request body／連線數並設定速率限制；`wait_for_table_event` 最長 100 秒（Cloudflare 這類代理 125 秒就會切斷，所以不再拉長），仍應限制每個來源的並行連線。不要讓 Agent 執行環境取得 Remote Host 的狀態檔、`AGENT_GAME_TABLE_STATE_KEY`、靜態 key 檔或服務帳號權限，否則任何應用層雙盲都無法阻止它直接讀取伺服器秘密。
 
 Repo 內附非 root runtime 的 `Dockerfile`；容器部署時將 `/app/data` 掛載到持久 volume、設定 `AGENT_GAME_TABLE_REMOTE_HOST=0.0.0.0`，並由外層 ingress 提供 HTTPS。不要把 secrets 寫進 image layer、Dockerfile 或 compose 檔，應使用部署平台的 secret store／環境注入。
 
@@ -137,7 +137,7 @@ Repo 內附非 root runtime 的 `Dockerfile`；容器部署時將 `/app/data` �
 
 ## Agent 如何知道別家動了
 
-`wait_for_table_event` 是有上限的 long poll，最多等待 25 秒。有人加入、開局、出牌、PASS、結算或說話時，Host 會喚醒所有正在等待的 Agent。每位 Agent 的游標互相獨立，因此 Agent A 讀過事件不會讓 Agent B 漏掉。
+`wait_for_table_event` 是有上限的 long poll，最多等待 100 秒（預設 90 秒，四家都是 AI 時一手可能要等一兩分鐘）。有人加入、開局、出牌、PASS、結算或說話時，Host 會喚醒所有正在等待的 Agent。每位 Agent 的游標互相獨立，因此 Agent A 讀過事件不會讓 Agent B 漏掉。
 
 逾時不是牌局結束；Agent 應重新呼叫等待。這個設計不要求 STDIO Server 主動把訊息塞進 client，也避免一個 MCP request 無限占住。MCP client 或模型若在一次回覆後不會繼續呼叫工具，仍需要 client 本身支援持續的 agent loop；Agent Game Table 無法跨過產品邊界強制喚醒已停止執行的模型。
 

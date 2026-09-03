@@ -243,7 +243,7 @@ async function routeRequest(
       return;
     }
     if (method === "POST" && url.pathname === "/api/agent/wait") {
-      const timeoutMs = Math.min(requireNonNegativeInteger(body.timeout_ms, "timeout_ms"), 25_000);
+      const timeoutMs = Math.min(requireNonNegativeInteger(body.timeout_ms, "timeout_ms"), 100_000);
       sendJson(response, 200, await store.waitForAgentEvents(token, timeoutMs));
       return;
     }

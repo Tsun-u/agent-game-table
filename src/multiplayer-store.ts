@@ -246,6 +246,8 @@ const GAME_MODE: GameMode = "bigtwo";
 const MAX_SEATS = 4;
 const MAX_MEMBERS = 16;
 const EVENT_CAP = 500;
+/** long poll 上限；Cloudflare 代理 125 秒就回 524，所以留在 100 秒以內。 */
+const MAX_WAIT_MS = 100_000;
 const CHAT_CAP = 100;
 const RECONNECT_TICKET_TTL_MS = 10 * 60 * 1000;
 const LEAVE_RECEIPT_CAP = 1_000;
@@ -645,7 +647,7 @@ export class MultiplayerTableStore {
       return this.#eventResult(table, session, immediate, false);
     }
     if (table.waiters.has(session.tokenHash)) throw new Error("這個 Agent 已經有一個等待中的事件請求。");
-    const boundedTimeout = Math.max(0, Math.min(timeoutMs, 25_000));
+    const boundedTimeout = Math.max(0, Math.min(timeoutMs, MAX_WAIT_MS));
     if (boundedTimeout === 0) return this.#eventResult(table, session, [], true);
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
