@@ -122,6 +122,13 @@ const departureSchema = z.object({
 export function createAgentGameTableMcpServer(host: AgentGameTableAgentHost = new AgentGameTableHostClient()): McpServer {
   let agentToken: string | null = null;
   let lastDeparture: AgentLeaveResult | null = null;
+  /** connector 類 client 每次呼叫可能是新 session：手上沒 token 就用登入身分向 Host 找回座位。 */
+  const currentToken = async (): Promise<string | null> => {
+    if (agentToken || !host.resumeAgent) return agentToken;
+    const resumed = await host.resumeAgent();
+    if (resumed) agentToken = resumed.agent_token;
+    return agentToken;
+  };
   const server = new McpServer(
     { name: "agent-game-table", version: "0.1.0" },
     {
@@ -157,7 +164,7 @@ export function createAgentGameTableMcpServer(host: AgentGameTableAgentHost = ne
       annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false },
     },
     async ({ join_code, agent_name, reconnect_code }) => {
-      if (agentToken) {
+      if (agentToken && !host.resumeAgent) {
         try {
           await host.getAgentView(agentToken);
           return errorResult("這個 MCP process 已經入座；一個 Agent process 只能持有一個有效座位。");
@@ -189,7 +196,7 @@ export function createAgentGameTableMcpServer(host: AgentGameTableAgentHost = ne
       outputSchema: { table: tableSchema },
       annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false, idempotentHint: true },
     },
-    async ({ expected_version, idempotency_key }) => withSeat(agentToken, async (token) => tableResult(await host.takeSeat(token, expected_version, idempotency_key))),
+    async ({ expected_version, idempotency_key }) => withSeat(currentToken, async (token) => tableResult(await host.takeSeat(token, expected_version, idempotency_key))),
   );
 
   server.registerTool(
@@ -201,7 +208,7 @@ export function createAgentGameTableMcpServer(host: AgentGameTableAgentHost = ne
       outputSchema: { table: tableSchema },
       annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false, idempotentHint: true },
     },
-    async ({ expected_version, idempotency_key }) => withSeat(agentToken, async (token) => tableResult(await host.leaveSeat(token, expected_version, idempotency_key))),
+    async ({ expected_version, idempotency_key }) => withSeat(currentToken, async (token) => tableResult(await host.leaveSeat(token, expected_version, idempotency_key))),
   );
 
   server.registerTool(
@@ -213,7 +220,7 @@ export function createAgentGameTableMcpServer(host: AgentGameTableAgentHost = ne
       outputSchema: { table: tableSchema },
       annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
     },
-    async () => withSeat(agentToken, async (token) => tableResult(await host.getAgentView(token))),
+    async () => withSeat(currentToken, async (token) => tableResult(await host.getAgentView(token))),
   );
 
   server.registerTool(
@@ -227,10 +234,10 @@ export function createAgentGameTableMcpServer(host: AgentGameTableAgentHost = ne
       annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: true, idempotentHint: true },
     },
     async () => {
-      if (!agentToken) {
+      const token = await currentToken();
+      if (!token) {
         return lastDeparture ? departureResult(lastDeparture) : errorResult("尚未入座，沒有可以離開的牌桌。");
       }
-      const token = agentToken;
       try {
         const departure = await host.leaveAgent(token);
         agentToken = null;
@@ -257,7 +264,7 @@ export function createAgentGameTableMcpServer(host: AgentGameTableAgentHost = ne
       annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false },
     },
     async ({ action, cards, expected_version, idempotency_key }) =>
-      withSeat(agentToken, async (token) =>
+      withSeat(currentToken, async (token) =>
         tableResult(await host.agentAction(token, action as TurnAction, expected_version, idempotency_key, cards)),
       ),
   );
@@ -275,7 +282,7 @@ export function createAgentGameTableMcpServer(host: AgentGameTableAgentHost = ne
       annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false },
     },
     async ({ message, idempotency_key }) =>
-      withSeat(agentToken, async (token) => tableResult(await host.agentSay(token, message, idempotency_key))),
+      withSeat(currentToken, async (token) => tableResult(await host.agentSay(token, message, idempotency_key))),
   );
 
   server.registerTool(
@@ -295,18 +302,19 @@ export function createAgentGameTableMcpServer(host: AgentGameTableAgentHost = ne
       annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false },
     },
     async ({ timeout_seconds }) =>
-      withSeat(agentToken, async (token) => eventResult(await host.waitForEvents(token, timeout_seconds * 1000))),
+      withSeat(currentToken, async (token) => eventResult(await host.waitForEvents(token, timeout_seconds * 1000))),
   );
 
   return server;
 }
 
 async function withSeat<T>(
-  token: string | null,
+  currentToken: () => Promise<string | null>,
   operation: (token: string) => Promise<T>,
 ): Promise<T | ReturnType<typeof errorResult>> {
-  if (!token) return errorResult("尚未入座，請先用人類 UI 顯示的邀請碼呼叫 join_table。");
   try {
+    const token = await currentToken();
+    if (!token) return errorResult("尚未入座，請先用人類 UI 顯示的邀請碼呼叫 join_table。");
     return await operation(token);
   } catch (error) {
     return errorResult(messageFrom(error));

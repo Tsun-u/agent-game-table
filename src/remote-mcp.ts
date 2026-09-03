@@ -289,6 +289,10 @@ class PrincipalStoreHost implements AgentGameTableAgentHost {
   async waitForEvents(agentToken: string, timeoutMs: number): Promise<AgentEventResult> {
     return this.#store.waitForAgentEvents(agentToken, timeoutMs);
   }
+
+  async resumeAgent(): Promise<AgentJoinResult | null> {
+    return this.#store.resumeAgentForPrincipal(this.#principalId);
+  }
 }
 
 function attachAuth(request: IncomingMessage & { auth?: AuthInfo }, token: string, principal: RemotePrincipal, resource: URL): void {

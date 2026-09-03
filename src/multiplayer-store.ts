@@ -249,6 +249,7 @@ export class MultiplayerTableStore {
   readonly #agentTokens = new Map<string, string>();
   readonly #humanTokens = new Map<string, { tableId: string; seatId: string }>();
   readonly #departedAgentTokens = new Map<string, AgentLeaveResult>();
+  /** 鍵是 principalBindingKey(身分, Agent 名字)：同一個登入身分可以帶多個名字不同的 Agent。 */
   readonly #principalSeats = new Map<string, { tableId: string; seatId: string }>();
   readonly #deckFactory: MultiplayerDeckFactory;
   readonly #persistence: MultiplayerTablePersistence | undefined;
@@ -318,7 +319,7 @@ export class MultiplayerTableStore {
     this.#joinCodes.delete(table.joinCode);
     for (const seat of table.seats) {
       if (seat.humanTokenHash) this.#humanTokens.delete(seat.humanTokenHash);
-      if (seat.principalId) this.#principalSeats.delete(seat.principalId);
+      if (seat.principalId) this.#principalSeats.delete(principalBindingKey(seat.principalId, seat.name));
     }
     for (const [tokenHash] of table.agentSessions) this.#agentTokens.delete(tokenHash);
     this.#tables.delete(table.id);
@@ -333,18 +334,36 @@ export class MultiplayerTableStore {
   joinAgentForPrincipal(joinCode: string, agentName: string, principalId: string): AgentJoinResult {
     const principal = normalizePrincipal(principalId);
     const table = this.#tableForJoinCode(joinCode);
-    const binding = this.#principalSeats.get(principal);
+    const bindingKey = principalBindingKey(principal, normalizeName(agentName, "AI 玩家"));
+    const binding = this.#principalSeats.get(bindingKey);
     if (binding) {
       const boundTable = this.#tables.get(binding.tableId);
       const boundSeat = boundTable?.seats.find((seat) => seat.id === binding.seatId);
-      if (!boundTable || !boundSeat || boundSeat.kind !== "agent") this.#principalSeats.delete(principal);
+      if (!boundTable || !boundSeat || boundSeat.kind !== "agent") this.#principalSeats.delete(bindingKey);
       else {
-        if (boundTable.id !== table.id) throw new Error("這個遠端 MCP 身分已經綁定另一張牌桌的座位。");
-        if (boundSeat.name !== normalizeName(agentName, "AI 玩家")) throw new Error("這個遠端 MCP 身分與既有 Agent 名稱不符。");
+        if (boundTable.id !== table.id) throw new Error("這個名字的 Agent 已經在另一張牌桌上，請先 leave_table。");
         return this.#reconnectSeat(table, boundSeat, principal);
       }
     }
     return this.#joinNewAgent(table, agentName, principal);
+  }
+
+  /**
+   * 給每次 tool call 都可能換 MCP session 的 client（claude.ai／ChatGPT connector）用：
+   * server 手上沒有座位 token 時，用登入身分找回唯一的座位並換發新 token，不留事件。
+   * 同一個身分帶了多個 Agent 時無法判斷是哪一個，要求重新 join_table 指名。
+   */
+  resumeAgentForPrincipal(principalId: string): AgentJoinResult | null {
+    const principal = normalizePrincipal(principalId);
+    const prefix = principalBindingKey(principal, "");
+    const bindings = [...this.#principalSeats.entries()].filter(([key]) => key.startsWith(prefix)).map(([, binding]) => binding);
+    if (bindings.length === 0) return null;
+    if (bindings.length > 1) throw new Error("這個登入身分帶了多個 Agent 在桌上，請帶 agent_name 重新呼叫 join_table 指明是哪一個。");
+    const binding = bindings[0]!;
+    const table = this.#tables.get(binding.tableId);
+    const seat = table?.seats.find((candidate) => candidate.id === binding.seatId);
+    if (!table || !seat || seat.kind !== "agent") return null;
+    return this.#issueAgentSession(table, seat, principal);
   }
 
   #joinNewAgent(table: Table, agentName: string, principalId: string | null): AgentJoinResult {
@@ -359,7 +378,7 @@ export class MultiplayerTableStore {
     table.seats.push(seat);
     table.agentSessions.set(tokenHash, session);
     this.#agentTokens.set(tokenHash, table.id);
-    if (principalId) this.#principalSeats.set(principalId, { tableId: table.id, seatId: seat.id });
+    if (principalId) this.#principalSeats.set(principalBindingKey(principalId, seat.name), { tableId: table.id, seatId: seat.id });
     table.version += 1;
     this.#appendEvent(table, "seat_joined", seat, `${seat.name} 加入了牌桌，先在觀戰區。`);
     session.cursor = table.nextEventId - 1;
@@ -405,7 +424,7 @@ export class MultiplayerTableStore {
     if (seat.kind !== "agent" || seat.name !== normalizeName(agentName, "AI 玩家")) throw new Error("重連碼與 Agent 座位不符。");
     if (seat.principalId && seat.principalId !== principalId) throw new Error("這個座位已綁定另一個遠端 MCP 身分。");
     if (principalId) {
-      const existing = this.#principalSeats.get(principalId);
+      const existing = this.#principalSeats.get(principalBindingKey(principalId, seat.name));
       if (existing && (existing.tableId !== table.id || existing.seatId !== seat.id)) throw new Error("這個遠端 MCP 身分已經綁定另一個座位。");
     }
     table.reconnectTickets.delete(codeHash);
@@ -413,6 +432,15 @@ export class MultiplayerTableStore {
   }
 
   #reconnectSeat(table: Table, seat: Seat, principalId: string | null): AgentJoinResult {
+    const result = this.#issueAgentSession(table, seat, principalId);
+    this.#appendEvent(table, "seat_reconnected", seat, `${seat.name} 已安全接回原座位。`);
+    this.#flushWaiters(table);
+    this.#persist();
+    return { agent_token: result.agent_token, table: this.#view(table, seat.id) };
+  }
+
+  /** 撤銷這個座位既有的 session、換發新 token；不寫事件，讓 reconnect 與靜默 resume 共用。 */
+  #issueAgentSession(table: Table, seat: Seat, principalId: string | null): AgentJoinResult {
     for (const [tokenHash, session] of table.agentSessions) {
       if (session.seatId !== seat.id) continue;
       const waiter = table.waiters.get(tokenHash);
@@ -430,10 +458,7 @@ export class MultiplayerTableStore {
     seat.principalId = principalId;
     table.agentSessions.set(tokenHash, session);
     this.#agentTokens.set(tokenHash, table.id);
-    if (principalId) this.#principalSeats.set(principalId, { tableId: table.id, seatId: seat.id });
-    this.#appendEvent(table, "seat_reconnected", seat, `${seat.name} 已安全接回原座位。`);
-    session.cursor = table.nextEventId - 1;
-    this.#flushWaiters(table);
+    if (principalId) this.#principalSeats.set(principalBindingKey(principalId, seat.name), { tableId: table.id, seatId: seat.id });
     this.#persist();
     return { agent_token: token, table: this.#view(table, seat.id) };
   }
@@ -745,7 +770,7 @@ export class MultiplayerTableStore {
       this.#rememberDepartedToken(tokenHash, leaveResult);
     }
     for (const [code, ticket] of table.reconnectTickets) if (ticket.seatId === seat.id) table.reconnectTickets.delete(code);
-    if (seat.principalId) this.#principalSeats.delete(seat.principalId);
+    if (seat.principalId) this.#principalSeats.delete(principalBindingKey(seat.principalId, seat.name));
     for (const key of table.receipts.keys()) if (key.startsWith(`${seat.id}:`)) table.receipts.delete(key);
     table.seats.splice(seatIndex, 1);
     table.passedSeatIds.delete(seat.id);
@@ -998,7 +1023,7 @@ export class MultiplayerTableStore {
       this.#joinCodes.set(table.joinCode, table.id);
       for (const seat of table.seats) {
         if (seat.humanTokenHash) this.#humanTokens.set(seat.humanTokenHash, { tableId: table.id, seatId: seat.id });
-        if (seat.principalId) this.#principalSeats.set(seat.principalId, { tableId: table.id, seatId: seat.id });
+        if (seat.principalId) this.#principalSeats.set(principalBindingKey(seat.principalId, seat.name), { tableId: table.id, seatId: seat.id });
       }
       for (const [tokenHash] of table.agentSessions) this.#agentTokens.set(tokenHash, table.id);
     }
@@ -1017,6 +1042,10 @@ function capabilityToken(): string {
 
 function capabilityHash(token: string): string {
   return createHash("sha256").update(token).digest("hex");
+}
+
+function principalBindingKey(principalId: string, seatName: string): string {
+  return `${principalId}\u0000${seatName}`;
 }
 
 function normalizePrincipal(value: string): string {

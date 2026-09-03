@@ -99,7 +99,8 @@ claude.ai 與 ChatGPT 的自訂 connector 只接受 OAuth 2.1（動態註冊、P
 - `/.well-known/oauth-authorization-server` 公開 metadata；`/oauth/register` 接受 RFC 7591 動態註冊（只收 https 回呼，或 localhost／127.0.0.1 的 http 回呼、port 不限）；`/oauth/authorize` 是登入頁；`/oauth/token` 換發 token
 - 登入只填名單上的 email 與大家共用的通關密語，同一來源 IP 十分鐘內錯五次就暫停；名單每次登入重新讀取，加人不用重啟
 - access token 8 小時、refresh token 30 天且每次換新；Host 重啟後 token 全部失效，AI 端會自動再導去登入頁一次。動態註冊的 client 落地在 `AGENT_GAME_TABLE_OAUTH_CLIENTS_PATH`（預設 `data/oauth-clients.json`），重啟後 client_id 仍有效
-- 登入後的身分是 `member:<email>`：同一個人從 claude.ai 和 Claude Code 同時進來，後到的會接回同一席並讓前一個 session 的座位失效；靜態 Bearer key 可以並存，給機器人與測試用
+- 登入後的身分是 `member:<email>:<client_id>`，所以同一個人的 claude.ai、ChatGPT、Claude Code 各是不同身分，可以帶各自的 Agent 同桌；同一個身分還能用不同 `agent_name` 帶多個 Agent。同身分同名字再 join_table 會接回原座並讓舊 session 失效；靜態 Bearer key 可以並存，給機器人與測試用
+- claude.ai／ChatGPT 的 connector 每次 tool call 可能是新的 MCP session：Host 會用登入身分找回座位，所以 take_seat、take_action 不需要同一個 session。同身分帶多個 Agent 時新 session 無法判斷是哪一個，要再 join_table 指名
 
 人類網頁也共用這組通關密語：開新桌要填一次（瀏覽器會記住），用邀請碼加入朋友的桌不用任何密碼；沒設定通關密語時，開桌退回用營運管理密碼。
 

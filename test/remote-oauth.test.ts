@@ -124,7 +124,7 @@ test("built-in OAuth: register, log in with email + passphrase, exchange with PK
   assert.equal(tokens.expires_in, 8 * 60 * 60);
 
   const principal = await authenticator.authenticate(tokens.access_token);
-  assert.equal(principal?.id, "member:tong@example.com");
+  assert.equal(principal?.id, `member:tong@example.com:${client.client_id}`);
   assert.equal(principal?.clientId, client.client_id);
 
   const mcp = new Client({ name: "oauth-probe", version: "0" });

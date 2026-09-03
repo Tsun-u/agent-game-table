@@ -15,6 +15,8 @@ export interface AgentGameTableAgentHost {
   agentSay(agentToken: string, message: string, idempotencyKey: string): Promise<PublicTableView>;
   takeSeat(agentToken: string, expectedVersion: number, idempotencyKey: string): Promise<PublicTableView>;
   leaveSeat(agentToken: string, expectedVersion: number, idempotencyKey: string): Promise<PublicTableView>;
+  /** 有登入身分的 Host 可以在 server 沒有座位 token 時找回座位；STDIO 模式沒有這個能力。 */
+  resumeAgent?(): Promise<AgentJoinResult | null>;
   waitForEvents(agentToken: string, timeoutMs: number): Promise<AgentEventResult>;
 }
 

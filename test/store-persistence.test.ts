@@ -42,10 +42,9 @@ test("encrypted persistence restores the human and principal-bound Agent seats w
   assert.equal(resumed.table.viewer_seat_id, joined.table.viewer_seat_id);
   assert.equal(resumed.table.legal_actions.includes("play_cards"), true);
   assert.throws(() => restored.getAgentView(joined.agent_token), /憑證無效/);
-  assert.throws(
-    () => restored.joinAgentForPrincipal(created.table.join_code, "冒牌小葵", "static:xiaokui"),
-    /名稱不符/,
-  );
+  const secondAgent = restored.joinAgentForPrincipal(created.table.join_code, "小葵二號", "static:xiaokui");
+  assert.notEqual(secondAgent.table.viewer_seat_id, joined.table.viewer_seat_id, "同一個身分換名字就是第二個 Agent");
+  assert.throws(() => restored.resumeAgentForPrincipal("static:xiaokui"), /多個 Agent/);
 });
 
 test("an encrypted state file rejects the wrong key", async (context) => {

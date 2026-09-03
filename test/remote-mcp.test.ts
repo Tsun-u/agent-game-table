@@ -131,6 +131,49 @@ test("Streamable HTTP authenticates every request and binds one remote caller to
   assert.equal(staleSession.isError, true, "reconnecting the principal revokes the older seat capability");
 });
 
+test("a connector that opens a new MCP session per call still finds its seat by principal", async (context) => {
+  const port = await availablePort();
+  const publicUrl = `http://127.0.0.1:${port}`;
+  const store = new MultiplayerTableStore(() => createDeck());
+  const created = store.createTable("阿童");
+  const authenticator = new StaticTokenAuthenticator({ xiaokui: XIAOKUI_TOKEN });
+  const gateway = new RemoteMcpGateway({ store, authenticator, publicUrl, humanAccessKey: HUMAN_KEY });
+  const host = await startAgentGameTableHost({ hostname: "127.0.0.1", port, store, extension: gateway });
+  context.after(async () => {
+    await gateway.close();
+    await host.close();
+  });
+
+  const joinSession = await connectRemote(publicUrl, XIAOKUI_TOKEN, "connector-call-1");
+  context.after(() => joinSession.client.close());
+  const joined = await joinSession.client.callTool({ name: "join_table", arguments: { join_code: created.table.join_code, agent_name: "小光" } });
+  assert.equal(joined.isError, undefined);
+  const seatId = tableFrom(joined).viewer_seat_id;
+
+  const seatSession = await connectRemote(publicUrl, XIAOKUI_TOKEN, "connector-call-2");
+  context.after(() => seatSession.client.close());
+  const view = await seatSession.client.callTool({ name: "get_table_view", arguments: {} });
+  assert.equal(view.isError, undefined, "a fresh session must not answer 尚未入座");
+  assert.equal(tableFrom(view).viewer_seat_id, seatId);
+  const seated = await seatSession.client.callTool({
+    name: "take_seat",
+    arguments: { expected_version: tableFrom(view).version, idempotency_key: "connector-take-seat-1" },
+  });
+  assert.equal(seated.isError, undefined);
+  assert.equal(tableFrom(seated).players.some((player) => player.seat_id === seatId), true);
+
+  const secondAgentSession = await connectRemote(publicUrl, XIAOKUI_TOKEN, "connector-call-3");
+  context.after(() => secondAgentSession.client.close());
+  const secondJoined = await secondAgentSession.client.callTool({ name: "join_table", arguments: { join_code: created.table.join_code, agent_name: "小燈" } });
+  assert.equal(secondJoined.isError, undefined, "the same principal may bring a second, differently named agent");
+  assert.notEqual(tableFrom(secondJoined).viewer_seat_id, seatId);
+
+  const ambiguousSession = await connectRemote(publicUrl, XIAOKUI_TOKEN, "connector-call-4");
+  context.after(() => ambiguousSession.client.close());
+  const ambiguous = await ambiguousSession.client.callTool({ name: "get_table_view", arguments: {} });
+  assert.equal(ambiguous.isError, true, "two agents under one principal cannot be resumed without a name");
+});
+
 test("OAuth mode advertises RFC 9728 protected resource metadata", async (context) => {
   const port = await availablePort();
   const publicUrl = `http://127.0.0.1:${port}`;
