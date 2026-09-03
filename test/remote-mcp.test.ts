@@ -61,26 +61,35 @@ test("Streamable HTTP authenticates every request and binds one remote caller to
   assert.equal(managedPayload.tables.length, 2);
   assert.equal(JSON.stringify(managedPayload).includes('"deck"'), false);
 
+  store.humanTakeSeat(created.human_token, store.getHumanView(created.human_token).version, "owner-seat-remote");
   const first = await connectRemote(publicUrl, XIAOKUI_TOKEN, "remote-first");
   context.after(() => first.client.close());
   const joined = await first.client.callTool({
     name: "join_table",
     arguments: { join_code: created.table.join_code, agent_name: "小葵" },
   });
-  const firstView = tableFrom(joined);
+  assert.equal(tableFrom(joined).viewer_role, "spectator");
+  const firstView = tableFrom(await first.client.callTool({
+    name: "take_seat",
+    arguments: { expected_version: tableFrom(joined).version, idempotency_key: "agent-a-seat-remote" },
+  }));
   assert.equal(firstView.players.length, 2);
   assert.equal(firstView.viewer_seat_id, firstView.players.find((seat) => seat.name === "小葵")?.seat_id);
 
   const second = await connectRemote(publicUrl, AYU_TOKEN, "remote-second");
   context.after(() => second.client.close());
-  const secondJoined = await second.client.callTool({
+  const secondEntered = await second.client.callTool({
     name: "join_table",
     arguments: { join_code: created.table.join_code, agent_name: "阿宇" },
+  });
+  const secondJoined = await second.client.callTool({
+    name: "take_seat",
+    arguments: { expected_version: tableFrom(secondEntered).version, idempotency_key: "agent-b-seat-remote" },
   });
   assert.equal(tableFrom(secondJoined).players.length, 3);
 
   const opened = store.startRound(created.human_token, tableFrom(secondJoined).version, "remote-start-round-1");
-  store.humanAction(created.human_token, "play_cards", opened.version, "remote-human-play-1", ["♦3"]);
+  store.humanAction(created.human_token, "play_cards", opened.version, "remote-human-play-1", ["♣3"]);
   const firstTurn = await first.client.callTool({ name: "get_table_view", arguments: {} });
   const serialized = JSON.stringify(firstTurn);
   assert.equal(serialized.includes('"deck"'), false);

@@ -40,10 +40,14 @@ test("the real browser UI stays usable when Agents leave or are removed", async 
   await page.locator("#tablePanel").waitFor({ state: "visible" });
   assert.equal((await page.locator("#joinCode").innerText()).trim(), joinCode, "the human resumes after a browser restart");
 
+  await page.getByRole("button", { name: "入座" }).click();
+  await waitForSeatCount(page, 1);
   const firstClient = new AgentGameTableHostClient(host.url);
   const secondClient = new AgentGameTableHostClient(host.url);
-  const first = await firstClient.joinAgent(joinCode, "小葵");
-  const second = await secondClient.joinAgent(joinCode, "阿宇");
+  const firstEntered = await firstClient.joinAgent(joinCode, "小葵");
+  const first = { ...firstEntered, table: await firstClient.takeSeat(firstEntered.agent_token, firstEntered.table.version, "e2e-seat-a") };
+  const secondEntered = await secondClient.joinAgent(joinCode, "阿宇");
+  const second = { ...secondEntered, table: await secondClient.takeSeat(secondEntered.agent_token, secondEntered.table.version, "e2e-seat-b") };
   await waitForSeatCount(page, 3);
 
   await page.getByRole("button", { name: "開始牌局" }).click();
@@ -79,6 +83,7 @@ test("the real browser UI stays usable when Agents leave or are removed", async 
 
   const returned = await firstClient.joinAgent(joinCode, "小葵");
   assert.notEqual(returned.table.viewer_seat_id, departure.seat_id);
+  await firstClient.takeSeat(returned.agent_token, returned.table.version, "e2e-seat-return");
   await waitForSeatCount(page, 2);
   const returnedRow = page.locator(".roster-row").filter({ hasText: "小葵" });
   page.once("dialog", (dialog) => dialog.accept());

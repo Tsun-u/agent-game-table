@@ -2,10 +2,12 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { parseCard, shuffledDeck, type Card } from "./cards.js";
 import {
+  DEFAULT_BIG_TWO_RULE_OPTIONS,
   bigTwoHandLabel,
   bigTwoPlayBeats,
   classifyBigTwoPlay,
   enumerateLegalBigTwoPlays,
+  type BigTwoRuleOptions,
   lowestBigTwoCard,
   sortBigTwoCards,
   type BigTwoPlay,
@@ -17,12 +19,15 @@ export type TablePhase = "lobby" | "player_turns" | "ended";
 export type SeatKind = "human" | "agent";
 export type SeatStatus = "waiting" | "active" | "passed" | "finished";
 export type TurnAction = "play_cards" | "pass";
-export type PublicAction = TurnAction | "start_round";
+export type PublicAction = TurnAction | "start_round" | "take_seat" | "leave_seat";
+export type MemberRole = "seated" | "spectator";
 export type TableEventKind =
   | "table_created"
   | "seat_joined"
   | "seat_left"
   | "seat_reconnected"
+  | "seat_taken"
+  | "seat_vacated"
   | "round_started"
   | "turn_started"
   | "cards_played"
@@ -43,11 +48,19 @@ export interface PublicSeatView {
   readonly is_you: boolean;
 }
 
+export interface PublicSpectatorView {
+  readonly seat_id: string;
+  readonly name: string;
+  readonly kind: SeatKind;
+  readonly is_you: boolean;
+}
+
 export interface PublicChatMessage {
   readonly event_id: number;
   readonly seat_id: string;
   readonly speaker: string;
   readonly speaker_kind: SeatKind;
+  readonly speaker_role: MemberRole;
   readonly text: string;
   readonly at: string;
 }
@@ -68,12 +81,17 @@ export interface PublicTableView {
   readonly mode: GameMode;
   readonly rule_label: "大老二";
   readonly rules_version: typeof BIG_TWO_RULES_VERSION;
+  readonly rule_options: BigTwoRuleOptions;
   readonly phase: TablePhase;
   readonly version: number;
   readonly round: number;
   readonly viewer_seat_id: string;
+  readonly viewer_role: MemberRole;
+  readonly viewer_is_owner: boolean;
+  readonly owner_name: string;
   readonly active_seat_id: string | null;
   readonly players: PublicSeatView[];
+  readonly spectators: PublicSpectatorView[];
   readonly pile: {
     readonly cards: string[];
     readonly hand_type: string | null;
@@ -124,6 +142,7 @@ export interface ManagedTableSummary {
   readonly round: number;
   readonly version: number;
   readonly player_count: number;
+  readonly spectator_count: number;
   readonly max_seats: 4;
   readonly human_name: string;
   readonly active_player_name: string | null;
@@ -148,6 +167,8 @@ interface Seat {
   readonly kind: SeatKind;
   readonly name: string;
   readonly cards: Card[];
+  seated: boolean;
+  seatIndex: number | null;
   status: SeatStatus;
   gameScore: number;
   roundsWon: number;
@@ -180,6 +201,8 @@ interface Table {
   readonly id: string;
   readonly joinCode: string;
   readonly ownerSeatId: string;
+  readonly options: BigTwoRuleOptions;
+  nextSeatIndex: number;
   phase: TablePhase;
   version: number;
   round: number;
@@ -214,6 +237,7 @@ export type MultiplayerDeckFactory = (round: number, seatCount: number) => reado
 
 const GAME_MODE: GameMode = "bigtwo";
 const MAX_SEATS = 4;
+const MAX_MEMBERS = 16;
 const EVENT_CAP = 500;
 const CHAT_CAP = 100;
 const RECONNECT_TICKET_TTL_MS = 10 * 60 * 1000;
@@ -236,17 +260,17 @@ export class MultiplayerTableStore {
     if (snapshot) this.#restore(snapshot);
   }
 
-  createTable(humanName: string): HumanTableResult {
+  createTable(humanName: string, options: BigTwoRuleOptions = DEFAULT_BIG_TWO_RULE_OPTIONS): HumanTableResult {
     const id = randomUUID();
     const joinCode = this.#newJoinCode();
     const humanToken = capabilityToken();
     const humanTokenHash = capabilityHash(humanToken);
     const humanSeat: Seat = {
-      id: randomUUID(), kind: "human", name: normalizeName(humanName, "玩家"), cards: [], status: "waiting",
+      id: randomUUID(), kind: "human", name: normalizeName(humanName, "玩家"), cards: [], seated: false, seatIndex: null, status: "waiting",
       gameScore: 0, roundsWon: 0, humanTokenHash, principalId: null,
     };
     const table: Table = {
-      id, joinCode, ownerSeatId: humanSeat.id, phase: "lobby", version: 1, round: 0, deck: [], activeSeatId: null,
+      id, joinCode, ownerSeatId: humanSeat.id, options: normalizeRuleOptions(options), nextSeatIndex: 0, phase: "lobby", version: 1, round: 0, deck: [], activeSeatId: null,
       currentPlay: null, currentPlaySeatId: null, passedSeatIds: new Set(), openingRequiredCard: null,
       setAsideCards: [], previousWinnerSeatId: null, seats: [humanSeat], agentSessions: new Map(), events: [], chat: [],
       nextEventId: 1, receipts: new Map(), waiters: new Map(), reconnectTickets: new Map(),
@@ -261,19 +285,18 @@ export class MultiplayerTableStore {
 
   joinHuman(joinCode: string, humanName: string): HumanTableResult {
     const table = this.#tableForJoinCode(joinCode);
-    if (table.phase === "player_turns") throw new Error("本局已經開始，請等牌局結束後再加入。");
-    this.#assertSeatAvailable(table);
+    this.#assertMemberAvailable(table);
     const name = this.#availableName(table, humanName, "玩家");
     const token = capabilityToken();
     const tokenHash = capabilityHash(token);
     const seat: Seat = {
-      id: randomUUID(), kind: "human", name, cards: [], status: "waiting", gameScore: 0, roundsWon: 0,
+      id: randomUUID(), kind: "human", name, cards: [], seated: false, seatIndex: null, status: "waiting", gameScore: 0, roundsWon: 0,
       humanTokenHash: tokenHash, principalId: null,
     };
     table.seats.push(seat);
     this.#humanTokens.set(tokenHash, { tableId: table.id, seatId: seat.id });
     table.version += 1;
-    this.#appendEvent(table, "seat_joined", seat, `${seat.name} 加入了牌桌。`);
+    this.#appendEvent(table, "seat_joined", seat, `${seat.name} 加入了牌桌，先在觀戰區。`);
     this.#flushWaiters(table);
     this.#persist();
     return { human_token: token, table: this.#view(table, seat.id) };
@@ -325,10 +348,9 @@ export class MultiplayerTableStore {
   }
 
   #joinNewAgent(table: Table, agentName: string, principalId: string | null): AgentJoinResult {
-    if (table.phase === "player_turns") throw new Error("本局已經開始，請等牌局結束後再加入。");
-    this.#assertSeatAvailable(table);
+    this.#assertMemberAvailable(table);
     const seat: Seat = {
-      id: randomUUID(), kind: "agent", name: this.#availableName(table, agentName, "AI 玩家"), cards: [], status: "waiting",
+      id: randomUUID(), kind: "agent", name: this.#availableName(table, agentName, "AI 玩家"), cards: [], seated: false, seatIndex: null, status: "waiting",
       gameScore: 0, roundsWon: 0, humanTokenHash: null, principalId,
     };
     const token = capabilityToken();
@@ -339,7 +361,7 @@ export class MultiplayerTableStore {
     this.#agentTokens.set(tokenHash, table.id);
     if (principalId) this.#principalSeats.set(principalId, { tableId: table.id, seatId: seat.id });
     table.version += 1;
-    this.#appendEvent(table, "seat_joined", seat, `${seat.name} 加入了牌桌。`);
+    this.#appendEvent(table, "seat_joined", seat, `${seat.name} 加入了牌桌，先在觀戰區。`);
     session.cursor = table.nextEventId - 1;
     this.#flushWaiters(table);
     this.#persist();
@@ -453,6 +475,66 @@ export class MultiplayerTableStore {
     return result;
   }
 
+  humanTakeSeat(humanToken: string, expectedVersion: number, idempotencyKey: string): PublicTableView {
+    const { table, seat } = this.#tableForHuman(humanToken);
+    return this.#takeSeat(table, seat, expectedVersion, idempotencyKey);
+  }
+
+  agentTakeSeat(agentToken: string, expectedVersion: number, idempotencyKey: string): PublicTableView {
+    const { table, session } = this.#tableForAgent(agentToken);
+    return this.#takeSeat(table, this.#requireSeat(table, session.seatId), expectedVersion, idempotencyKey);
+  }
+
+  humanLeaveSeat(humanToken: string, expectedVersion: number, idempotencyKey: string): PublicTableView {
+    const { table, seat } = this.#tableForHuman(humanToken);
+    return this.#leaveSeat(table, seat, expectedVersion, idempotencyKey);
+  }
+
+  agentLeaveSeat(agentToken: string, expectedVersion: number, idempotencyKey: string): PublicTableView {
+    const { table, session } = this.#tableForAgent(agentToken);
+    return this.#leaveSeat(table, this.#requireSeat(table, session.seatId), expectedVersion, idempotencyKey);
+  }
+
+  #takeSeat(table: Table, seat: Seat, expectedVersion: number, idempotencyKey: string): PublicTableView {
+    const operation = "take_seat";
+    const replay = this.#replay<PublicTableView>(table, seat.id, idempotencyKey, operation);
+    if (replay) return replay;
+    this.#assertVersion(table, expectedVersion);
+    if (table.phase === "player_turns") throw new Error("本局進行中，等這局結束再入座。");
+    if (seat.seated) throw new Error("你已經在座位上。");
+    if (seatedMembers(table).length >= MAX_SEATS) throw new Error("四個座位都有人了，請先觀戰。");
+    seat.seated = true;
+    seat.seatIndex = table.nextSeatIndex;
+    table.nextSeatIndex += 1;
+    seat.status = "waiting";
+    seat.cards.splice(0);
+    table.version += 1;
+    this.#appendEvent(table, "seat_taken", seat, `${seat.name} 入座。`);
+    const result = this.#remember(table, seat.id, idempotencyKey, operation, this.#view(table, seat.id));
+    this.#flushWaiters(table);
+    this.#persist();
+    return result;
+  }
+
+  #leaveSeat(table: Table, seat: Seat, expectedVersion: number, idempotencyKey: string): PublicTableView {
+    const operation = "leave_seat";
+    const replay = this.#replay<PublicTableView>(table, seat.id, idempotencyKey, operation);
+    if (replay) return replay;
+    this.#assertVersion(table, expectedVersion);
+    if (table.phase === "player_turns") throw new Error("本局進行中不能起身；要離開牌桌請用 leave_table。");
+    if (!seat.seated) throw new Error("你已經在觀戰區。");
+    seat.seated = false;
+    seat.seatIndex = null;
+    seat.status = "waiting";
+    seat.cards.splice(0);
+    table.version += 1;
+    this.#appendEvent(table, "seat_vacated", seat, `${seat.name} 起身到觀戰區。`);
+    const result = this.#remember(table, seat.id, idempotencyKey, operation, this.#view(table, seat.id));
+    this.#flushWaiters(table);
+    this.#persist();
+    return result;
+  }
+
   startRound(humanToken: string, expectedVersion: number, idempotencyKey: string): PublicTableView {
     const { table, seat: humanSeat } = this.#tableForHuman(humanToken);
     if (humanSeat.id !== table.ownerSeatId) throw new Error("只有開桌的人可以開始新局。");
@@ -461,9 +543,10 @@ export class MultiplayerTableStore {
     if (replay) return replay;
     this.#assertVersion(table, expectedVersion);
     if (table.phase === "player_turns") throw new Error("目前牌局還沒結束。");
-    if (table.seats.length < 2 || table.seats.length > MAX_SEATS) throw new Error("大老二需要 2 到 4 位玩家才能開始。");
+    const seated = seatedMembers(table);
+    if (seated.length < 2 || seated.length > MAX_SEATS) throw new Error("大老二需要 2 到 4 位入座的玩家才能開始。");
     table.round += 1;
-    table.deck = this.#deckFactory(table.round, table.seats.length).map((card) => typeof card === "string" ? parseCard(card) : card);
+    table.deck = this.#deckFactory(table.round, seated.length).map((card) => typeof card === "string" ? parseCard(card) : card);
     table.activeSeatId = null;
     table.currentPlay = null;
     table.currentPlaySeatId = null;
@@ -540,15 +623,16 @@ export class MultiplayerTableStore {
 
   #deal(table: Table): void {
     if (table.deck.length !== 52 || new Set(table.deck.map((card) => card.code)).size !== 52) throw new Error("大老二需要一副完整且不重複的 52 張牌。");
-    const cardsPerSeat = table.seats.length === 4 ? 13 : table.seats.length === 3 ? 17 : 13;
-    for (let index = 0; index < cardsPerSeat; index += 1) for (const seat of table.seats) seat.cards.push(this.#draw(table));
-    for (const seat of table.seats) seat.cards.splice(0, seat.cards.length, ...sortBigTwoCards(seat.cards));
-    if (table.seats.length === 3) table.setAsideCards = [this.#draw(table)];
-    const openingCard = lowestBigTwoCard(table.seats.flatMap((seat) => seat.cards));
+    const seated = seatedMembers(table);
+    const cardsPerSeat = seated.length === 3 ? 17 : 13;
+    for (let index = 0; index < cardsPerSeat; index += 1) for (const seat of seated) seat.cards.push(this.#draw(table));
+    for (const seat of seated) seat.cards.splice(0, seat.cards.length, ...sortBigTwoCards(seat.cards));
+    if (seated.length === 3) table.setAsideCards = [this.#draw(table)];
+    const openingCard = lowestBigTwoCard(seated.flatMap((seat) => seat.cards));
     const previousWinner = table.round > 1 && table.previousWinnerSeatId
-      ? table.seats.find((seat) => seat.id === table.previousWinnerSeatId)
+      ? seated.find((seat) => seat.id === table.previousWinnerSeatId)
       : null;
-    const leader = previousWinner ?? table.seats.find((seat) => seat.cards.some((card) => card.code === openingCard.code))!;
+    const leader = previousWinner ?? seated.find((seat) => seat.cards.some((card) => card.code === openingCard.code))!;
     table.openingRequiredCard = table.round === 1 ? openingCard.code : null;
     leader.status = "active";
     table.activeSeatId = leader.id;
@@ -561,12 +645,8 @@ export class MultiplayerTableStore {
       if (!table.currentPlay || table.currentPlaySeatId === seat.id) throw new Error("目前由你領出新墩，不能 pass。");
       table.passedSeatIds.add(seat.id);
       seat.status = "passed";
-      if (table.seats.length === 2 && table.deck.length) {
-        seat.cards.push(this.#draw(table));
-        seat.cards.splice(0, seat.cards.length, ...sortBigTwoCards(seat.cards));
-      }
       this.#appendEvent(table, "player_passed", seat, `${seat.name} pass。`);
-      this.#advance(table, table.seats.indexOf(seat));
+      this.#advance(table, seatedMembers(table).indexOf(seat));
       return;
     }
     if (!cardCodes.length) throw new Error("請至少選一張牌。");
@@ -578,7 +658,7 @@ export class MultiplayerTableStore {
     });
     const play = classifyBigTwoPlay(selected);
     if (table.openingRequiredCard && !selected.some((card) => card.code === table.openingRequiredCard)) throw new Error(`本局第一手必須包含 ${table.openingRequiredCard}。`);
-    if (table.currentPlay && !bigTwoPlayBeats(play, table.currentPlay)) throw new Error(`這手 ${bigTwoHandLabel(play.kind)} 沒有大過桌面上的 ${bigTwoHandLabel(table.currentPlay.kind)}。`);
+    if (table.currentPlay && !bigTwoPlayBeats(play, table.currentPlay, table.options)) throw new Error(`這手 ${bigTwoHandLabel(play.kind)} 沒有大過桌面上的 ${bigTwoHandLabel(table.currentPlay.kind)}。`);
     const selectedCodes = new Set(selected.map((card) => card.code));
     seat.cards.splice(0, seat.cards.length, ...seat.cards.filter((card) => !selectedCodes.has(card.code)));
     table.currentPlay = play;
@@ -587,13 +667,15 @@ export class MultiplayerTableStore {
     seat.status = seat.cards.length ? "waiting" : "finished";
     this.#appendEvent(table, "cards_played", seat, `${seat.name} 出了 ${bigTwoHandLabel(play.kind)}：${play.cards.map((card) => card.code).join(" ")}。`);
     if (!seat.cards.length) this.#settle(table, seat);
-    else this.#advance(table, table.seats.indexOf(seat));
+    else this.#advance(table, seatedMembers(table).indexOf(seat));
   }
 
+  /** currentIndex 是「入座名單」裡的索引；觀戰者不在輪轉裡。 */
   #advance(table: Table, currentIndex: number): void {
+    const seated = seatedMembers(table);
     let next: Seat | null = null;
-    for (let offset = 1; offset <= table.seats.length; offset += 1) {
-      const candidate = table.seats[(currentIndex + offset) % table.seats.length]!;
+    for (let offset = 1; offset <= seated.length; offset += 1) {
+      const candidate = seated[(currentIndex + offset) % seated.length]!;
       if (candidate.status === "finished" || table.passedSeatIds.has(candidate.id)) continue;
       next = candidate;
       break;
@@ -603,7 +685,7 @@ export class MultiplayerTableStore {
       table.currentPlay = null;
       table.currentPlaySeatId = null;
       table.passedSeatIds.clear();
-      for (const candidate of table.seats) if (candidate.status !== "finished") candidate.status = "waiting";
+      for (const candidate of seated) if (candidate.status !== "finished") candidate.status = "waiting";
       this.#appendEvent(table, "trick_started", next, `${next.name} 收下這墩，重新領牌。`);
     }
     next.status = "active";
@@ -615,15 +697,16 @@ export class MultiplayerTableStore {
     table.activeSeatId = null;
     table.previousWinnerSeatId = winner.id;
     let winnings = 0;
-    for (const seat of table.seats) {
+    const seated = seatedMembers(table);
+    for (const seat of seated) {
       if (seat.id === winner.id) continue;
-      const stake = bigTwoStake(seat.cards.length, table.seats.length);
+      const stake = bigTwoStake(seat.cards);
       seat.gameScore -= stake;
       winnings += stake;
     }
     winner.gameScore += winnings;
     winner.roundsWon += 1;
-    for (const seat of table.seats) seat.status = "finished";
+    for (const seat of seated) seat.status = "finished";
     table.phase = "ended";
     this.#appendEvent(table, "round_ended", winner, `${winner.name} 出完手牌，贏得第 ${table.round} 局。`);
   }
@@ -635,7 +718,7 @@ export class MultiplayerTableStore {
     const replay = this.#replay<PublicTableView>(table, seat.id, idempotencyKey, operation);
     if (replay) return replay;
     const event = this.#appendEvent(table, "message", seat, normalized);
-    table.chat.push({ event_id: event.event_id, seat_id: seat.id, speaker: seat.name, speaker_kind: seat.kind, text: normalized, at: event.at });
+    table.chat.push({ event_id: event.event_id, seat_id: seat.id, speaker: seat.name, speaker_kind: seat.kind, speaker_role: seat.seated ? "seated" : "spectator", text: normalized, at: event.at });
     if (table.chat.length > CHAT_CAP) table.chat.splice(0, table.chat.length - CHAT_CAP);
     const result = this.#remember(table, seat.id, idempotencyKey, operation, this.#view(table, seat.id));
     this.#flushWaiters(table);
@@ -647,6 +730,7 @@ export class MultiplayerTableStore {
     if (seat.kind !== "agent") throw new Error("只能移除 Agent 玩家。");
     const seatIndex = table.seats.indexOf(seat);
     if (seatIndex < 0) throw new Error("找不到這個座位。");
+    const seatedIndex = seatedMembers(table).indexOf(seat);
     const wasActive = table.phase === "player_turns" && table.activeSeatId === seat.id;
     for (const [tokenHash, session] of table.agentSessions) {
       if (session.seatId !== seat.id) continue;
@@ -673,11 +757,11 @@ export class MultiplayerTableStore {
     }
     if (wasActive) table.activeSeatId = null;
     this.#appendEvent(table, "seat_left", seat, text);
-    if (table.phase === "player_turns" && table.seats.length < 2) {
+    if (table.phase === "player_turns" && seatedIndex >= 0 && seatedMembers(table).length < 2) {
       table.phase = "ended";
       table.activeSeatId = null;
       this.#appendEvent(table, "round_ended", null, "玩家不足兩位，本局結束。");
-    } else if (wasActive) this.#advance(table, seatIndex - 1);
+    } else if (wasActive) this.#advance(table, seatedIndex - 1);
     table.version += 1;
     this.#flushWaiters(table);
   }
@@ -703,26 +787,33 @@ export class MultiplayerTableStore {
 
   #view(table: Table, viewerSeatId: string): PublicTableView {
     const viewer = this.#requireSeat(table, viewerSeatId);
+    const seated = seatedMembers(table);
     const legalActions: PublicAction[] = [];
     if (table.phase === "player_turns" && table.activeSeatId === viewer.id) {
       legalActions.push("play_cards");
       if (table.currentPlay && table.currentPlaySeatId !== viewer.id) legalActions.push("pass");
     }
-    if (viewer.id === table.ownerSeatId && (table.phase === "lobby" || table.phase === "ended")) legalActions.push("start_round");
-    const legalPlays = viewer.kind === "agent" && table.phase === "player_turns" && table.activeSeatId === viewer.id
-      ? enumerateLegalBigTwoPlays(viewer.cards, table.currentPlay, table.openingRequiredCard).map((play) => ({
+    if (table.phase !== "player_turns") {
+      if (viewer.id === table.ownerSeatId) legalActions.push("start_round");
+      if (viewer.seated) legalActions.push("leave_seat");
+      else if (seated.length < MAX_SEATS) legalActions.push("take_seat");
+    }
+    const legalPlays = viewer.kind === "agent" && viewer.seated && table.phase === "player_turns" && table.activeSeatId === viewer.id
+      ? enumerateLegalBigTwoPlays(viewer.cards, table.currentPlay, table.openingRequiredCard, table.options).map((play) => ({
         cards: play.cards.map((card) => card.code),
         hand_type: bigTwoHandLabel(play.kind),
       }))
       : [];
     const pileSeat = table.currentPlaySeatId ? table.seats.find((seat) => seat.id === table.currentPlaySeatId) ?? null : null;
     return {
-      table_id: table.id, join_code: table.joinCode, mode: GAME_MODE, rule_label: "大老二", rules_version: BIG_TWO_RULES_VERSION, phase: table.phase,
-      version: table.version, round: table.round, viewer_seat_id: viewerSeatId, active_seat_id: table.activeSeatId,
-      players: table.seats.map((seat) => ({
+      table_id: table.id, join_code: table.joinCode, mode: GAME_MODE, rule_label: "大老二", rules_version: BIG_TWO_RULES_VERSION, rule_options: table.options, phase: table.phase,
+      version: table.version, round: table.round, viewer_seat_id: viewerSeatId, viewer_role: viewer.seated ? "seated" : "spectator", viewer_is_owner: viewer.id === table.ownerSeatId,
+      owner_name: this.#requireSeat(table, table.ownerSeatId).name, active_seat_id: table.activeSeatId,
+      players: seated.map((seat) => ({
         seat_id: seat.id, name: seat.name, kind: seat.kind, cards: seat.id === viewerSeatId ? seat.cards.map((card) => card.code) : [],
         hand_count: seat.cards.length, game_score: seat.gameScore, rounds_won: seat.roundsWon, status: seat.status, is_you: seat.id === viewerSeatId,
       })),
+      spectators: table.seats.filter((seat) => !seat.seated).map((seat) => ({ seat_id: seat.id, name: seat.name, kind: seat.kind, is_you: seat.id === viewerSeatId })),
       pile: {
         cards: table.currentPlay?.cards.map((card) => card.code) ?? [], hand_type: table.currentPlay ? bigTwoHandLabel(table.currentPlay.kind) : null,
         played_by_seat_id: pileSeat?.id ?? null, played_by_name: pileSeat?.name ?? null,
@@ -737,9 +828,9 @@ export class MultiplayerTableStore {
     const createdAt = table.events[0]?.at ?? new Date(0).toISOString();
     return {
       table_id: table.id, join_code: table.joinCode, mode: GAME_MODE, rule_label: "大老二", phase: table.phase,
-      round: table.round, version: table.version, player_count: table.seats.length, max_seats: MAX_SEATS,
+      round: table.round, version: table.version, player_count: seatedMembers(table).length, spectator_count: table.seats.filter((seat) => !seat.seated).length, max_seats: MAX_SEATS,
       human_name: this.#requireSeat(table, table.ownerSeatId).name, active_player_name: activeSeat?.name ?? null,
-      players: table.seats.map((seat) => ({ name: seat.name, kind: seat.kind })), created_at: createdAt,
+      players: seatedMembers(table).map((seat) => ({ name: seat.name, kind: seat.kind })), created_at: createdAt,
       updated_at: table.events.at(-1)?.at ?? createdAt,
     };
   }
@@ -812,8 +903,8 @@ export class MultiplayerTableStore {
     return seat;
   }
 
-  #assertSeatAvailable(table: Table): void {
-    if (table.seats.length >= MAX_SEATS) throw new Error("這張大老二牌桌最多 4 個座位。");
+  #assertMemberAvailable(table: Table): void {
+    if (table.seats.length >= MAX_MEMBERS) throw new Error(`這張牌桌最多 ${MAX_MEMBERS} 人（含觀戰）。`);
   }
 
   #availableName(table: Table, value: string, fallback: string): string {
@@ -853,13 +944,13 @@ export class MultiplayerTableStore {
     this.#persistence?.save({
       format: "agent-game-table-big-two-store", version: 1,
       tables: [...this.#tables.values()].map((table) => ({
-        id: table.id, joinCode: table.joinCode, ownerSeatId: table.ownerSeatId, phase: table.phase, version: table.version,
+        id: table.id, joinCode: table.joinCode, ownerSeatId: table.ownerSeatId, options: table.options, nextSeatIndex: table.nextSeatIndex, phase: table.phase, version: table.version,
         round: table.round, deck: table.deck.map((card) => card.code), activeSeatId: table.activeSeatId,
         currentPlay: table.currentPlay ? { cards: table.currentPlay.cards.map((card) => card.code), kind: table.currentPlay.kind, score: table.currentPlay.score } : null,
         currentPlaySeatId: table.currentPlaySeatId, passedSeatIds: [...table.passedSeatIds], openingRequiredCard: table.openingRequiredCard,
         setAsideCards: table.setAsideCards.map((card) => card.code), previousWinnerSeatId: table.previousWinnerSeatId,
         seats: table.seats.map((seat) => ({
-          id: seat.id, kind: seat.kind, name: seat.name, cards: seat.cards.map((card) => card.code), status: seat.status,
+          id: seat.id, kind: seat.kind, name: seat.name, cards: seat.cards.map((card) => card.code), seated: seat.seated, seatIndex: seat.seatIndex, status: seat.status,
           gameScore: seat.gameScore, roundsWon: seat.roundsWon, humanTokenHash: seat.humanTokenHash, principalId: seat.principalId,
         })),
         agentSessions: [...table.agentSessions.values()].map((session) => ({ ...session })), events: table.events, chat: table.chat,
@@ -876,8 +967,11 @@ export class MultiplayerTableStore {
       const saved = raw as Record<string, unknown>;
       if (typeof saved.id !== "string" || typeof saved.joinCode !== "string" || typeof saved.ownerSeatId !== "string") throw new Error("Agent Game Table 持久化牌桌資料不完整。");
       if (!Array.isArray(saved.seats) || !Array.isArray(saved.agentSessions)) throw new Error("Agent Game Table 持久化座位資料不完整。");
-      const seats = (saved.seats as Array<Record<string, unknown>>).map((seat): Seat => ({
+      // 舊快照沒有 seated 欄位：當時所有成員都是入座者，座位順序就是陣列順序。
+      const seats = (saved.seats as Array<Record<string, unknown>>).map((seat, index): Seat => ({
         id: String(seat.id), kind: seat.kind as SeatKind, name: String(seat.name), cards: (seat.cards as string[]).map(parseCard),
+        seated: typeof seat.seated === "boolean" ? seat.seated : true,
+        seatIndex: typeof seat.seatIndex === "number" ? seat.seatIndex : typeof seat.seated === "boolean" && !seat.seated ? null : index,
         status: seat.status as SeatStatus, gameScore: Number(seat.gameScore ?? 0), roundsWon: Number(seat.roundsWon ?? 0),
         humanTokenHash: typeof seat.humanTokenHash === "string" ? seat.humanTokenHash : null,
         principalId: typeof seat.principalId === "string" ? seat.principalId : null,
@@ -885,7 +979,8 @@ export class MultiplayerTableStore {
       if (!seats.some((seat) => seat.id === saved.ownerSeatId && seat.kind === "human")) throw new Error("Agent Game Table 開桌者資料無效。");
       const play = saved.currentPlay as { cards?: string[]; kind?: BigTwoPlay["kind"]; score?: number[] } | null;
       const table: Table = {
-        id: saved.id, joinCode: saved.joinCode, ownerSeatId: saved.ownerSeatId, phase: saved.phase as TablePhase,
+        id: saved.id, joinCode: saved.joinCode, ownerSeatId: saved.ownerSeatId, options: normalizeRuleOptions(saved.options),
+        nextSeatIndex: typeof saved.nextSeatIndex === "number" ? saved.nextSeatIndex : seats.length, phase: saved.phase as TablePhase,
         version: Number(saved.version), round: Number(saved.round), deck: (saved.deck as string[]).map(parseCard),
         activeSeatId: typeof saved.activeSeatId === "string" ? saved.activeSeatId : null,
         currentPlay: play?.cards && play.kind && play.score ? { cards: play.cards.map(parseCard), kind: play.kind, score: play.score.map(Number) } : null,
@@ -911,6 +1006,11 @@ export class MultiplayerTableStore {
   }
 }
 
+/** 入座者依入座順序排列；觀戰者不在牌局輪轉裡。 */
+function seatedMembers(table: Table): Seat[] {
+  return table.seats.filter((seat) => seat.seated).sort((left, right) => (left.seatIndex ?? 0) - (right.seatIndex ?? 0));
+}
+
 function capabilityToken(): string {
   return randomBytes(32).toString("base64url");
 }
@@ -925,15 +1025,26 @@ function normalizePrincipal(value: string): string {
   return normalized;
 }
 
+/** 接受缺欄位（舊快照、舊 client）補預設值；欄位存在但不是布林值就拒絕。 */
+export function normalizeRuleOptions(value: unknown): BigTwoRuleOptions {
+  if (value === undefined || value === null) return DEFAULT_BIG_TWO_RULE_OPTIONS;
+  if (typeof value !== "object") throw new Error("options 必須是物件。");
+  const raw = value as Record<string, unknown>;
+  const read = (key: keyof BigTwoRuleOptions): boolean => {
+    const field = raw[key];
+    if (field === undefined) return DEFAULT_BIG_TWO_RULE_OPTIONS[key];
+    if (typeof field !== "boolean") throw new Error(`options.${key} 必須是 true 或 false。`);
+    return field;
+  };
+  return Object.freeze({ bombs_beat_anything: read("bombs_beat_anything"), five_card_same_kind_only: read("five_card_same_kind_only") });
+}
+
 function normalizeName(value: string, fallback: string): string {
   const normalized = value.trim().slice(0, 80);
   return normalized || fallback;
 }
 
-function bigTwoStake(cardCount: number, playerCount: number): number {
-  if (cardCount <= 0) return 0;
-  const multiplier = playerCount === 4
-    ? cardCount >= 13 ? 4 : cardCount >= 11 ? 3 : cardCount >= 8 ? 2 : 1
-    : cardCount >= 17 ? 4 : cardCount >= 13 ? 3 : cardCount >= 10 ? 2 : 1;
-  return cardCount * multiplier;
+function bigTwoStake(remaining: readonly Card[]): number {
+  const twos = remaining.filter((card) => card.rank === "2").length;
+  return remaining.length * 2 ** twos;
 }

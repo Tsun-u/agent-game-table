@@ -7,6 +7,7 @@ import test from "node:test";
 import { createDeck } from "../src/cards.js";
 import { MultiplayerTableStore } from "../src/multiplayer-store.js";
 import { EncryptedFileTablePersistence, generateStateKey } from "../src/store-persistence.js";
+import { seatAgent, seatHuman, tableVersion } from "./helpers.js";
 
 test("encrypted persistence restores the human and principal-bound Agent seats without leaking tokens or cards", async (context) => {
   const directory = await mkdtemp(join(tmpdir(), "agent-game-table-persistence-"));
@@ -16,15 +17,17 @@ test("encrypted persistence restores the human and principal-bound Agent seats w
   const persistence = new EncryptedFileTablePersistence(path, stateKey);
   const store = new MultiplayerTableStore(() => createDeck(), { persistence });
 
-  const created = store.createTable("阿童");
+  const created = store.createTable("阿童", { bombs_beat_anything: true, five_card_same_kind_only: true });
+  seatHuman(store, created.human_token);
   const joined = store.joinAgentForPrincipal(created.table.join_code, "小葵", "static:xiaokui");
-  const opened = store.startRound(created.human_token, joined.table.version, "persist-start-0001");
-  store.humanAction(created.human_token, "play_cards", opened.version, "persist-human-play-1", ["♦3"]);
+  seatAgent(store, joined.agent_token);
+  const opened = store.startRound(created.human_token, tableVersion(store, created.human_token), "persist-start-0001");
+  store.humanAction(created.human_token, "play_cards", opened.version, "persist-human-play-1", ["♣3"]);
 
   const ciphertext = await readFile(path, "utf8");
   assert.doesNotMatch(ciphertext, new RegExp(created.human_token));
   assert.doesNotMatch(ciphertext, new RegExp(joined.agent_token));
-  assert.equal(ciphertext.includes("♦4"), false, "private cards must not appear in the encrypted envelope");
+  assert.equal(ciphertext.includes("♣4"), false, "private cards must not appear in the encrypted envelope");
   assert.equal(ciphertext.includes("小葵"), false, "player names must not appear in the encrypted envelope");
 
   const restored = new MultiplayerTableStore(() => createDeck(), {
@@ -32,6 +35,7 @@ test("encrypted persistence restores the human and principal-bound Agent seats w
   });
   const humanView = restored.getHumanView(created.human_token);
   assert.equal(humanView.table_id, created.table.table_id);
+  assert.deepEqual(humanView.rule_options, { bombs_beat_anything: true, five_card_same_kind_only: true }, "host options survive a restart");
   assert.equal(humanView.active_seat_id, joined.table.viewer_seat_id);
 
   const resumed = restored.joinAgentForPrincipal(created.table.join_code, "小葵", "static:xiaokui");

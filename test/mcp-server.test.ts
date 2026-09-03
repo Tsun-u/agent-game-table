@@ -20,7 +20,7 @@ test("multiple MCP Agents play Big Two with isolated capabilities and event curs
 
   const tools = await first.listTools();
   assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [
-    "get_game_rules", "get_table_view", "join_table", "leave_table", "say_at_table", "take_action", "wait_for_table_event",
+    "get_game_rules", "get_table_view", "join_table", "leave_seat", "leave_table", "say_at_table", "take_action", "take_seat", "wait_for_table_event",
   ]);
   const schemas = JSON.stringify(tools);
   assert.equal(schemas.includes('"deck"'), false);
@@ -28,18 +28,30 @@ test("multiple MCP Agents play Big Two with isolated capabilities and event curs
   assert.equal((await first.callTool({ name: "get_table_view", arguments: {} })).isError, true);
 
   const rules = await first.callTool({ name: "get_game_rules", arguments: {} });
-  assert.equal((rules.structuredContent as { rules?: { rules_version?: string } }).rules?.rules_version, "bigtwo-tw-1");
+  assert.equal((rules.structuredContent as { rules?: { rules_version?: string } }).rules?.rules_version, "bigtwo-tw-4");
   assert.equal(JSON.stringify(rules).includes("A-2-3-4-5"), true);
 
   const created = store.createTable("阿童");
   const firstJoin = await first.callTool({ name: "join_table", arguments: { join_code: created.table.join_code, agent_name: "小葵" } });
   const secondJoin = await second.callTool({ name: "join_table", arguments: { join_code: created.table.join_code, agent_name: "阿宇" } });
   assert.equal(JSON.stringify(firstJoin).includes("agent_token"), false);
-  assert.equal((firstJoin.structuredContent as { rules?: { rules_version?: string } }).rules?.rules_version, "bigtwo-tw-1");
-  const opened = store.startRound(created.human_token, tableFrom(secondJoin).version, "mcp-start-01");
+  assert.equal((firstJoin.structuredContent as { rules?: { rules_version?: string } }).rules?.rules_version, "bigtwo-tw-4");
+  assert.equal(tableFrom(firstJoin).viewer_role, "spectator");
+  store.humanTakeSeat(created.human_token, tableFrom(secondJoin).version, "owner-seat-mcp");
+  await seatVia(first, "agent-a-seat-mcp");
+  const secondSeated = await seatVia(second, "agent-b-seat-mcp");
+  assert.deepEqual(secondSeated.players.map((seat) => seat.name), ["阿童", "小葵", "阿宇"]);
+  const optionTable = store.createTable("房主", { bombs_beat_anything: true, five_card_same_kind_only: false });
+  const optionClient = await connectMcp(new AgentGameTableHostClient(host.url), "agent-options", context);
+  const optionJoin = await optionClient.callTool({ name: "join_table", arguments: { join_code: optionTable.table.join_code, agent_name: "阿宇選項" } });
+  const optionRules = (optionJoin.structuredContent as { rules: { table_options: Array<{ key: string; enabled: boolean }> } }).rules.table_options;
+  assert.deepEqual(optionRules.map((option) => [option.key, option.enabled]), [["bombs_beat_anything", true], ["five_card_same_kind_only", false]]);
+  assert.equal(JSON.stringify(optionJoin.content).includes("鐵支同花順全壓：開"), true);
+  await optionClient.callTool({ name: "leave_table", arguments: {} });
+  const opened = store.startRound(created.human_token, store.getHumanView(created.human_token).version, "mcp-start-01");
   await first.callTool({ name: "wait_for_table_event", arguments: { timeout_seconds: 0 } });
   await second.callTool({ name: "wait_for_table_event", arguments: { timeout_seconds: 0 } });
-  store.humanAction(created.human_token, "play_cards", opened.version, "mcp-owner-play-01", ["♦3"]);
+  store.humanAction(created.human_token, "play_cards", opened.version, "mcp-owner-play-01", ["♣3"]);
 
   const firstNotice = await first.callTool({ name: "wait_for_table_event", arguments: { timeout_seconds: 0 } });
   const firstTurn = tableFrom(firstNotice);
@@ -66,7 +78,7 @@ test("multiple MCP Agents play Big Two with isolated capabilities and event curs
 
   const firstPlay = await replacement.callTool({
     name: "take_action",
-    arguments: { action: "play_cards", cards: ["♦4"], expected_version: firstTurn.version, idempotency_key: "agent-a-play-mcp" },
+    arguments: { action: "play_cards", cards: ["♣4"], expected_version: firstTurn.version, idempotency_key: "agent-a-play-mcp" },
   });
   assert.equal(firstPlay.isError, undefined);
   const secondNotice = await second.callTool({ name: "wait_for_table_event", arguments: { timeout_seconds: 0 } });
@@ -106,4 +118,9 @@ function tableFrom(result: unknown): PublicTableView {
 
 function eventKinds(result: unknown): string[] {
   return ((result as { structuredContent?: { events?: Array<{ kind: string }> } }).structuredContent?.events ?? []).map((event) => event.kind);
+}
+
+async function seatVia(client: Client, idempotencyKey: string): Promise<PublicTableView> {
+  const current = tableFrom(await client.callTool({ name: "get_table_view", arguments: {} }));
+  return tableFrom(await client.callTool({ name: "take_seat", arguments: { expected_version: current.version, idempotency_key: idempotencyKey } }));
 }

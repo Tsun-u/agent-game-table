@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { extname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { MultiplayerTableStore, type TurnAction } from "./multiplayer-store.js";
+import { MultiplayerTableStore, normalizeRuleOptions, type TurnAction } from "./multiplayer-store.js";
 
 export interface AgentGameTableHostOptions {
   readonly hostname?: string;
@@ -78,7 +78,7 @@ async function routeRequest(
   if (method === "POST" && url.pathname === "/api/tables") {
     const body = await readJsonBody(request);
     const humanName = requireString(body.human_name, "human_name");
-    sendJson(response, 201, store.createTable(humanName));
+    sendJson(response, 201, store.createTable(humanName, normalizeRuleOptions(body.options)));
     return;
   }
   if (method === "POST" && url.pathname === "/api/human/join") {
@@ -106,6 +106,18 @@ async function routeRequest(
       return;
     }
     const body = await readJsonBody(request);
+    if (method === "POST" && url.pathname === "/api/human/seat") {
+      sendJson(response, 200, {
+        table: store.humanTakeSeat(token, requirePositiveInteger(body.expected_version, "expected_version"), requireIdempotencyKey(body.idempotency_key)),
+      });
+      return;
+    }
+    if (method === "POST" && url.pathname === "/api/human/unseat") {
+      sendJson(response, 200, {
+        table: store.humanLeaveSeat(token, requirePositiveInteger(body.expected_version, "expected_version"), requireIdempotencyKey(body.idempotency_key)),
+      });
+      return;
+    }
     if (method === "POST" && url.pathname === "/api/human/start-round") {
       sendJson(response, 200, {
         table: store.startRound(
@@ -188,6 +200,18 @@ async function routeRequest(
       return;
     }
     const body = await readJsonBody(request);
+    if (method === "POST" && url.pathname === "/api/agent/seat") {
+      sendJson(response, 200, {
+        table: store.agentTakeSeat(token, requirePositiveInteger(body.expected_version, "expected_version"), requireIdempotencyKey(body.idempotency_key)),
+      });
+      return;
+    }
+    if (method === "POST" && url.pathname === "/api/agent/unseat") {
+      sendJson(response, 200, {
+        table: store.agentLeaveSeat(token, requirePositiveInteger(body.expected_version, "expected_version"), requireIdempotencyKey(body.idempotency_key)),
+      });
+      return;
+    }
     if (method === "POST" && url.pathname === "/api/agent/action") {
       sendJson(response, 200, {
         table: store.agentAction(
@@ -311,7 +335,7 @@ function sendBytes(response: ServerResponse, status: number, data: Uint8Array, t
     "Content-Type": type,
     "Content-Length": data.byteLength,
     "Cache-Control": "no-store",
-    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
   });

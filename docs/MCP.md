@@ -17,7 +17,7 @@ Remote Streamable HTTP MCP ─┘       ├─ 本機：記憶體
 - `agent-game-table-host` 是唯一牌局權威，持有牌堆與所有座位狀態。
 - 本機模式由每個 MCP client 啟動自己的 `agent-game-table-mcp` STDIO process；該 process 只在記憶體持有自己座位的 capability token。
 - Remote 模式逐次驗證 Bearer／OAuth token，並把驗證後的 caller principal 綁定座位；不同 principal 不能接管彼此的 MCP session 或座位。
-- 人類在 UI 建立牌桌並取得邀請碼。受管理密碼保護的營運台可以管理多桌；Agent 仍只能用邀請碼入座，無法列舉其他牌桌。
+- 人類在 UI 建立牌桌並取得邀請碼。同一組邀請碼給人也給 Agent：進桌都先在觀戰區，自己選擇入座；開局後座位凍結，每局結束後入座者可以起身、觀戰者可以入座，讓大家輪流打。開桌者是房主，管開局、重連碼、移除與關桌，自己坐不坐都可以。受管理密碼保護的營運台可以管理多桌；Agent 仍只能用邀請碼進桌，無法列舉其他牌桌。
 - 開桌者負責開局；首局由持有最低牌的玩家先攻，之後依出牌與 PASS 狀態輪替。
 - 本機 Host 的牌桌只存在記憶體；Remote Host 使用 AES-256-GCM 加密快照，Host 重啟後可恢復牌桌、回合、事件游標與憑證雜湊。
 
@@ -150,7 +150,9 @@ Agent instructions 會要求它持續參與後續牌局，直到人類結束測�
 | Tool | 用途 |
 | --- | --- |
 | `get_game_rules` | 入座或出牌前讀取目前版本的完整大老二 house rules，不包含任何牌桌暗牌 |
-| `join_table` | 用邀請碼取得新座位，或搭配人類提供的 `reconnect_code` 接回原座位 |
+| `join_table` | 用邀請碼進桌，先在觀戰區；或搭配人類提供的 `reconnect_code` 接回原成員身分 |
+| `take_seat` | 局間從觀戰區入座（最多 4 席），下一局會被發牌 |
+| `leave_seat` | 局間起身回觀戰區讓位，分數跟著成員保留；進行中不能起身 |
 | `get_table_view` | 讀取最新公開牌桌、自己的座位、合法動作與本回合所有 `legal_plays` |
 | `leave_table` | 永久離桌、撤銷座位 token，並讓同一 process 可以加入其他牌桌 |
 | `take_action` | 輪到自己時執行 `play_cards`／`pass` |
@@ -161,7 +163,7 @@ Agent instructions 會要求它持續參與後續牌局，直到人類結束測�
 
 ### Agent 規則與合法牌組
 
-MCP 公開版本化的 `bigtwo-tw-1` 規則表，內容與 Host 實際判定一致，包含牌碼、點數與花色順序、發牌方式、首攻、合法牌型、五張牌型比較、PASS／收墩流程及計分。`get_game_rules` 可在尚未入座時呼叫；`join_table` 成功時也會再次附上完整規則，避免 Agent 略過規則便開始猜。
+MCP 公開版本化的 `bigtwo-tw-4` 規則表，內容與 Host 實際判定一致，包含牌碼、點數與花色順序、發牌方式、首攻、合法牌型、五張牌型比較、PASS／收墩流程及計分。`get_game_rules` 可在尚未入座時呼叫，回傳預設選項的規則；房主開桌時可開啟「鐵支同花順全壓」與「五張同牌型互壓」，`join_table` 成功時附上的規則表會依該桌設定生成（`table_options`），牌桌視角也帶 `rule_options`，`legal_plays` 已依此計算。
 
 只有輪到 Agent 行動時，`table.legal_plays` 才會列出牌組。每個項目包含 `cards` 與 `hand_type`，且已同時通過牌型、首攻必帶牌與壓過桌面牌組的檢查；Agent 應依自己的策略選擇其中一項，但不得自行修改其中的牌碼。人類視角及非當前 Agent 的 `legal_plays` 為空陣列，避免無用的大型回傳。
 

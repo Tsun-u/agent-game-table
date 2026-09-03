@@ -33,22 +33,33 @@ test("HTTP Host serves the Big Two table and shares one authority with Agent cli
   assert.equal((await managed.json() as { tables: unknown[] }).tables.length, 2);
   await fetch(`${host.url}/api/admin/tables/${other.table.table_id}`, { method: "DELETE" });
 
+  assert.deepEqual(created.table.rule_options, { bombs_beat_anything: false, five_card_same_kind_only: false });
+  const optioned = await request<{ table: PublicTableView }>(host.url, "/api/tables", {
+    method: "POST", body: { human_name: "房主", options: { bombs_beat_anything: true } },
+  });
+  assert.deepEqual(optioned.table.rule_options, { bombs_beat_anything: true, five_card_same_kind_only: false });
   const agent = new AgentGameTableHostClient(host.url);
   const joined = await agent.joinAgent(created.table.join_code, "小葵");
+  assert.equal(joined.table.viewer_role, "spectator");
+  const ownerSeated = await request<{ table: PublicTableView }>(host.url, "/api/human/seat", {
+    method: "POST", token: created.human_token, body: { expected_version: joined.table.version, idempotency_key: "human-seat-http-01" },
+  });
+  const agentSeated = await agent.takeSeat(joined.agent_token, ownerSeated.table.version, "agent-seat-http-01");
+  assert.deepEqual(agentSeated.players.map((seat) => seat.name), ["阿童", "小葵"]);
   const opened = await request<{ table: PublicTableView }>(host.url, "/api/human/start-round", {
     method: "POST",
     token: created.human_token,
-    body: { expected_version: joined.table.version, idempotency_key: "human-start-http-01" },
+    body: { expected_version: agentSeated.version, idempotency_key: "human-start-http-01" },
   });
-  assert.equal(opened.table.players.find((seat) => seat.is_you)?.cards.includes("♦3"), true);
-  assert.equal(JSON.stringify(opened).includes("♦4"), false, "the Agent hand stays private");
+  assert.equal(opened.table.players.find((seat) => seat.is_you)?.cards.includes("♣3"), true);
+  assert.equal(JSON.stringify(opened).includes("♣4"), false, "the Agent hand stays private");
 
   await agent.waitForEvents(joined.agent_token, 0);
   const waiting = agent.waitForEvents(joined.agent_token, 2_000);
   await request(host.url, "/api/human/action", {
     method: "POST",
     token: created.human_token,
-    body: { action: "play_cards", cards: ["♦3"], expected_version: opened.table.version, idempotency_key: "human-play-http-01" },
+    body: { action: "play_cards", cards: ["♣3"], expected_version: opened.table.version, idempotency_key: "human-play-http-01" },
   });
   const notice = await waiting;
   assert.equal(notice.events.some((event) => event.kind === "cards_played" && event.actor_name === "阿童"), true);

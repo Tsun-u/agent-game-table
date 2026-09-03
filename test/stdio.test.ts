@@ -22,16 +22,26 @@ test("separate compiled STDIO Agent processes share one human-hosted table", asy
   assert.equal(tools.tools.some((tool) => tool.name === "list_tables"), false);
 
   const created = store.createTable("阿童");
-  await first.callTool({
+  store.humanTakeSeat(created.human_token, created.table.version, "owner-seat-stdio");
+  const firstEntered = await first.callTool({
     name: "join_table",
     arguments: { join_code: created.table.join_code, agent_name: "小葵" },
   });
-  const joined = await second.callTool({
+  await first.callTool({
+    name: "take_seat",
+    arguments: { expected_version: (firstEntered.structuredContent as { table: { version: number } }).table.version, idempotency_key: "agent-a-seat-stdio" },
+  });
+  const entered = await second.callTool({
     name: "join_table",
     arguments: { join_code: created.table.join_code, agent_name: "阿宇" },
   });
+  assert.equal(entered.isError, undefined);
+  assert.equal(JSON.stringify(entered).includes("agent_token"), false);
+  const joined = await second.callTool({
+    name: "take_seat",
+    arguments: { expected_version: (entered.structuredContent as { table: { version: number } }).table.version, idempotency_key: "agent-b-seat-stdio" },
+  });
   assert.equal(joined.isError, undefined);
-  assert.equal(JSON.stringify(joined).includes("agent_token"), false);
 
   const version = (joined.structuredContent as { table: { version: number } }).table.version;
   store.startRound(created.human_token, version, "human-start-stdio");

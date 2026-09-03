@@ -6,16 +6,32 @@
 
 ## 第一階段功能
 
-- 2～4 位真人與 Agent 任意混搭的大老二；
-- 3♦ 起手、單張／一對／三條／順子／同花／葫蘆／鐵支／同花順；
+- 一組邀請碼進桌，人和 AI 進來都先在觀戰區，自己選擇入座；最多 4 席、觀戰不限人數，局間可以換人輪流打；
+- ♣3 起手、單張／一對／順子／葫蘆／鐵支／同花順（台灣慣例：不打同花與三條，五張只能被五張壓）；房主開桌時可另外開啟「鐵支同花順全壓」與「五張同牌型互壓」；
 - 獨立牌桌邀請碼、人類座位憑證與 Agent capability；
 - Server authoritative state，對手只看得到剩餘張數；
 - `expected_version`、冪等寫入與每位 Agent 各自的事件游標；
 - 本機 STDIO MCP，以及可自行架設的 Streamable HTTP Remote MCP；
 - 多桌營運台、AES-256-GCM 加密持久化及 Remote principal 綁定；
 - 卡牌互動、回合提示與同源 Lottie 結算動畫，支援 `prefers-reduced-motion`。
+- 介面字體用 justfont 的粉圓（Huninn，OFL），透過 jsDelivr 的 Fontsource 分段載入；Host 的 CSP 已放行 `cdn.jsdelivr.net` 的樣式與字體，離線時退回系統黑體。
 
-大老二規格參考 MIT 授權的 [XavionM/Big_Two](https://github.com/XavionM/Big_Two) 與其 [house rules](https://github.com/XavionM/Big_Two/blob/main/big-two-rules.md)，並重寫成 TypeScript 規則模組。
+大老二規則採台灣民間常見玩法，寫成 TypeScript 規則模組並以 `get_game_rules` 公開（目前版本 `bigtwo-tw-4`）：
+
+- 花色 ♣ 梅花 < ♦ 方塊 < ♥ 紅心 < ♠ 黑桃，點數 3 最小、2 最大；首局由持有 ♣3 的玩家先攻且第一手必須包含 ♣3；
+- 牌型只有單張、一對、順子、葫蘆、鐵支、同花順，沒有同花與三條；
+- 順子以 A-2-3-4-5 最小、2-3-4-5-6 最大，2 不得出現在其他順子；
+- 跟牌張數必須相同，五張牌只能被五張牌壓過，鐵支與同花順不能跨張數壓牌；
+- PASS 後本墩不再行動，回合回到最後出牌者時重新領牌；
+- 輸家以剩牌張數計分，手上每留一張 2 就加倍一次；
+- 三人局每人 17 張、留 1 張公開；兩人局每人 13 張、其餘不使用。
+
+房主開桌時可以開啟兩個選項，整桌固定、寫進 `join_table` 回傳的規則表與牌桌視角的 `rule_options`：
+
+- **鐵支同花順全壓**：鐵支與同花順不受張數限制，可壓桌上任何非鐵支／同花順的牌組，同花順壓鐵支；
+- **五張同牌型互壓**：順子只能被更大的順子壓、葫蘆只能被更大的葫蘆壓（預設是高階牌型可壓低階牌型）。兩個選項同時開啟時，鐵支與同花順仍可壓其他五張牌型。
+
+專案早期曾參考 MIT 授權的 [XavionM/Big_Two](https://github.com/XavionM/Big_Two) 建立牌型分類的骨架，現行規則已依台灣玩法重新定義，與該專案的 house rules 不同。
 
 ## 本機開桌
 
@@ -40,7 +56,7 @@ codex mcp add agent-game-table -- node D:\絕對路徑\agent-game-table\dist\src
 claude mcp add --transport stdio --scope user agent-game-table -- node D:\絕對路徑\agent-game-table\dist\src\index.js
 ```
 
-在人類 UI 按「複製邀請詞」交給 Agent。Agent 會先呼叫 `get_game_rules` 讀取版本化完整規則，再使用 `join_table` 入座；`join_table` 的成功回傳也會附上同一份規則，確保第一次出牌前已收到規則表。輪到 Agent 時，Host 會在 `legal_plays` 列出所有可合法送出的牌組；Agent 應從中選一組原樣傳給 `play_cards`，或依 `legal_actions` 使用 `pass`／`wait_for_table_event`。
+在人類 UI 按「複製邀請詞」交給 Agent。Agent 會先呼叫 `get_game_rules` 讀取版本化完整規則，再用 `join_table` 進桌（先在觀戰區）、`take_seat` 入座；局間可用 `leave_seat` 回觀戰區讓位；`join_table` 的成功回傳也會附上同一份規則，確保第一次出牌前已收到規則表。輪到 Agent 時，Host 會在 `legal_plays` 列出所有可合法送出的牌組；Agent 應從中選一組原樣傳給 `play_cards`，或依 `legal_actions` 使用 `pass`／`wait_for_table_event`。
 
 ## Remote MCP
 
