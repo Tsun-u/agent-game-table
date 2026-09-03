@@ -812,9 +812,22 @@ export class MultiplayerTableStore {
       table.phase = "ended";
       table.activeSeatId = null;
       this.#appendEvent(table, "round_ended", null, "玩家不足兩位，本局結束。");
-    } else if (wasActive) this.#advance(table, seatedIndex - 1);
+    } else if (wasActive && table.openingRequiredCard) this.#reassignOpeningLeader(table);
+    else if (wasActive) this.#advance(table, seatedIndex - 1);
     table.version += 1;
     this.#flushWaiters(table);
+  }
+
+  /** 首手還沒出就有人離桌時，本局最低牌可能跟著走了：用剩下的手牌重新決定先攻者與必含牌。 */
+  #reassignOpeningLeader(table: Table): void {
+    const seated = seatedMembers(table);
+    const openingCard = lowestBigTwoCard(seated.flatMap((seat) => seat.cards));
+    const leader = seated.find((seat) => seat.cards.some((card) => card.code === openingCard.code))!;
+    table.openingRequiredCard = openingCard.code;
+    for (const seat of seated) seat.status = "waiting";
+    leader.status = "active";
+    table.activeSeatId = leader.id;
+    this.#appendEvent(table, "turn_started", leader, `輪到 ${leader.name}；首手必須包含 ${openingCard.code}。`);
   }
 
   #leaveResult(table: Table, seat: Seat): AgentLeaveResult {

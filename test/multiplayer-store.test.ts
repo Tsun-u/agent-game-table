@@ -220,3 +220,28 @@ function twoPlayerDeck(): Card[] {
   codes.push(...ranks.map((rank) => `♥${rank}`), ...ranks.map((rank) => `♠${rank}`));
   return codes.map((code) => createDeck().find((card) => card.code === code)!);
 }
+
+test("when the opening-card holder leaves before the first play, the lowest remaining card leads instead", () => {
+  const clubThree = createDeck().find((card) => card.code === "♣3")!;
+  const others = createDeck().filter((card) => card.code !== "♣3");
+  const deck: Card[] = [others[0]!, clubThree, ...others.slice(1)];
+  const store = new MultiplayerTableStore(() => deck.map((card) => ({ ...card })));
+  const owner = store.createTable("阿童");
+  seatHuman(store, owner.human_token);
+  const leaver = store.joinAgent(owner.table.join_code, "小燈");
+  seatAgent(store, leaver.agent_token);
+  const stayer = store.joinAgent(owner.table.join_code, "阿宇");
+  seatAgent(store, stayer.agent_token);
+  store.startRound(owner.human_token, tableVersion(store, owner.human_token), "start-opening-leave-01");
+  assert.equal(store.getAgentView(leaver.agent_token).active_seat_id, leaver.table.viewer_seat_id, "♣3 holder leads");
+
+  store.leaveAgent(leaver.agent_token);
+  const ownerView = store.getHumanView(owner.human_token);
+  const stayerView = store.getAgentView(stayer.agent_token);
+  const activeView = ownerView.active_seat_id === ownerView.viewer_seat_id ? ownerView : stayerView;
+  assert.equal(activeView.legal_actions.includes("play_cards"), true);
+  assert.equal(activeView.legal_plays.length > 0, true, "the new leader must have a legal opening play");
+  const requiredCard = activeView.legal_plays[0]!.cards.find((code) => activeView.legal_plays.every((play) => play.cards.includes(code)));
+  assert.notEqual(requiredCard, undefined, "every opening play shares the new lowest card");
+  assert.notEqual(requiredCard, "♣3");
+});
