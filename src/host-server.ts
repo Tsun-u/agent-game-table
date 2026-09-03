@@ -259,6 +259,10 @@ async function routeRequest(
 function staticAsset(pathname: string): string | null {
   if (pathname === "/" || pathname === "/index.html") return "index.html";
   if (pathname === "/app.js") return "app.js";
+  if (pathname === "/connect" || pathname === "/connect.html") return "connect.html";
+  if (pathname === "/connect.js") return "connect.js";
+  const guideImage = /^\/guide\/([a-z0-9-]+\.webp)$/.exec(pathname);
+  if (guideImage) return `guide/${guideImage[1]}`;
   if (pathname === "/styles.css") return "styles.css";
   if (pathname === "/vendor/lottie-light.min.js") return "vendor/lottie-light.min.js";
   if (pathname === "/animations/round-complete.json") return "animations/round-complete.json";
@@ -351,5 +355,6 @@ function contentType(filename: string): string {
   if (extension === ".js") return "text/javascript; charset=utf-8";
   if (extension === ".css") return "text/css; charset=utf-8";
   if (extension === ".json") return "application/json; charset=utf-8";
+  if (extension === ".webp") return "image/webp";
   return "text/html; charset=utf-8";
 }
