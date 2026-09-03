@@ -71,7 +71,8 @@ input:focus-visible { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(38, 
 .rule-options legend { padding: 0 6px; color: var(--muted); font-size: 0.82rem; }
 .rule-option { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
 .rule-option input { width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--blue); }
-.rule-option small { display: block; color: var(--muted); font-size: 0.8rem; }
+.rule-option small, .create-form label small, .admin-key small { display: block; color: var(--muted); font-size: 0.8rem; }
+.admin-key { display: grid; gap: 6px; max-width: 420px; margin-bottom: 14px; }
 .form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .form-actions .primary-button { flex: 1 1 200px; }
 

@@ -15,6 +15,7 @@ import { RemoteMcpGateway } from "../src/remote-mcp.js";
 const XIAOKUI_TOKEN = "xiaokui-remote-token-0000000000000001";
 const AYU_TOKEN = "ayu-remote-token-00000000000000000002";
 const HUMAN_KEY = "human-remote-access-key-00000000000001";
+const PASSPHRASE = "clubs-three-opens";
 
 test("Streamable HTTP authenticates every request and binds one remote caller to one double-blind seat", async (context) => {
   const port = await availablePort();
@@ -22,7 +23,7 @@ test("Streamable HTTP authenticates every request and binds one remote caller to
   const store = new MultiplayerTableStore(() => createDeck());
   const created = store.createTable("阿童");
   const authenticator = new StaticTokenAuthenticator({ xiaokui: XIAOKUI_TOKEN, ayu: AYU_TOKEN });
-  const gateway = new RemoteMcpGateway({ store, authenticator, publicUrl, humanAccessKey: HUMAN_KEY });
+  const gateway = new RemoteMcpGateway({ store, authenticator, publicUrl, humanAccessKey: HUMAN_KEY, createPassphrase: PASSPHRASE });
   const host = await startAgentGameTableHost({ hostname: "127.0.0.1", port, store, extension: gateway });
   context.after(async () => {
     await gateway.close();
@@ -47,10 +48,21 @@ test("Streamable HTTP authenticates every request and binds one remote caller to
   assert.equal(unprotectedCreate.status, 401);
   const protectedCreate = await fetch(`${publicUrl}/api/tables`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-Agent-Game-Table-Human-Key": HUMAN_KEY },
+    headers: { "Content-Type": "application/json", "X-Agent-Game-Table-Passphrase": PASSPHRASE },
     body: JSON.stringify({ human_name: "遠端人類" }),
   });
   assert.equal(protectedCreate.status, 201);
+  const createdByPassphrase = await protectedCreate.json() as { table: { join_code: string } };
+  const passphraseCannotManage = await fetch(`${publicUrl}/api/admin/tables`, {
+    headers: { "X-Agent-Game-Table-Human-Key": PASSPHRASE },
+  });
+  assert.equal(passphraseCannotManage.status, 401);
+  const joinWithoutSecret = await fetch(`${publicUrl}/api/human/join`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ join_code: createdByPassphrase.table.join_code, human_name: "拿到邀請碼的朋友" }),
+  });
+  assert.equal(joinWithoutSecret.status, 200);
   const unauthorizedManagement = await fetch(`${publicUrl}/api/admin/tables`);
   assert.equal(unauthorizedManagement.status, 401);
   const managed = await fetch(`${publicUrl}/api/admin/tables`, {

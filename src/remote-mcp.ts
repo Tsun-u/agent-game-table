@@ -36,7 +36,10 @@ export interface RemoteMcpGatewayOptions {
   readonly publicUrl: string;
   readonly allowedOrigins?: string[];
   readonly allowedHosts?: string[];
+  /** 營運管理密碼：列出與關閉牌桌（/api/admin/*）專用。 */
   readonly humanAccessKey: string;
+  /** 開桌通關密語：和 OAuth 登入共用同一組；沒設定時，開桌欄位填營運管理密碼也可以。 */
+  readonly createPassphrase?: string;
 }
 
 export class RemoteMcpGateway {
@@ -48,6 +51,7 @@ export class RemoteMcpGateway {
   readonly #allowedOrigins: Set<string>;
   readonly #allowedHosts: Set<string>;
   readonly #humanAccessKeyHash: Buffer;
+  readonly #createPassphraseHash: Buffer | null;
   readonly #oauth: RemoteOAuthEndpoints | null;
   readonly #sessions = new Map<string, RemoteSession>();
 
@@ -62,6 +66,7 @@ export class RemoteMcpGateway {
     this.#allowedHosts = new Set([this.#publicUrl.host.toLowerCase(), ...(options.allowedHosts ?? []).map((host) => host.toLowerCase())]);
     if (options.humanAccessKey.trim().length < 32) throw new Error("AGENT_GAME_TABLE_HUMAN_ACCESS_KEY 至少需要 32 個字元。");
     this.#humanAccessKeyHash = hashSecret(options.humanAccessKey.trim());
+    this.#createPassphraseHash = options.createPassphrase?.trim() ? hashSecret(options.createPassphrase.trim()) : null;
     this.#oauth = options.oauth ?? null;
   }
 
@@ -75,7 +80,7 @@ export class RemoteMcpGateway {
       return this.#oauth.handle(request, response);
     }
     if (request.method === "GET" && url.pathname === "/api/remote-config") {
-      sendJson(response, 200, { remote: true, human_access_key_required: true, table_management: true });
+      sendJson(response, 200, { remote: true, create_passphrase_required: true, table_management: true });
       return true;
     }
     if (request.method === "GET" && url.pathname === "/api/remote-health") {
@@ -88,14 +93,16 @@ export class RemoteMcpGateway {
       });
       return true;
     }
-    if (
-      (request.method === "POST" && url.pathname === "/api/tables") ||
-      (request.method === "POST" && url.pathname === "/api/human/join") ||
-      url.pathname.startsWith("/api/admin/")
-    ) {
-      const humanKey = singleHeader(request.headers["x-agent-game-table-human-key"]);
-      if (!humanKey || !safeSecretEqual(humanKey, this.#humanAccessKeyHash)) {
-        sendJson(response, 401, { error: "遠端營運管理密碼不正確。" });
+    if (request.method === "POST" && url.pathname === "/api/tables") {
+      if (!this.#adminKeyMatches(request) && !this.#createPassphraseMatches(request)) {
+        sendJson(response, 401, { error: "通關密語不對，開桌前先向站長拿。" });
+        return true;
+      }
+      return false;
+    }
+    if (url.pathname.startsWith("/api/admin/")) {
+      if (!this.#adminKeyMatches(request)) {
+        sendJson(response, 401, { error: "營運管理密碼不正確。" });
         return true;
       }
       return false;
@@ -203,6 +210,17 @@ export class RemoteMcpGateway {
       return `Bearer resource_metadata="${this.#metadataUrl}", scope="${scope}"`;
     }
     return `Bearer realm="agent-game-table", scope="${scope}"`;
+  }
+
+  #adminKeyMatches(request: IncomingMessage): boolean {
+    const key = singleHeader(request.headers["x-agent-game-table-human-key"]);
+    return Boolean(key) && safeSecretEqual(key!, this.#humanAccessKeyHash);
+  }
+
+  #createPassphraseMatches(request: IncomingMessage): boolean {
+    const passphrase = singleHeader(request.headers["x-agent-game-table-passphrase"]);
+    if (!passphrase) return false;
+    return safeSecretEqual(passphrase, this.#createPassphraseHash ?? this.#humanAccessKeyHash);
   }
 
   #validHost(request: IncomingMessage): boolean {

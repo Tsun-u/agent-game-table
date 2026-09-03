@@ -184,8 +184,8 @@ test("the remote human resumes after both the browser and encrypted Host restart
   });
 
   await page.goto(publicUrl);
-  await page.getByLabel("遠端營運管理密碼").waitFor({ state: "visible" });
-  await page.getByLabel("遠端營運管理密碼").fill(humanAccessKey);
+  await page.getByLabel("通關密語").waitFor({ state: "visible" });
+  await page.getByLabel("通關密語").fill(humanAccessKey);
   await page.getByRole("button", { name: "建立共桌牌局" }).click();
   await page.locator("#tablePanel").waitFor({ state: "visible" });
   const joinCode = (await page.locator("#joinCode").innerText()).trim();

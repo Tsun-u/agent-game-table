@@ -2,6 +2,7 @@
   "use strict";
 
   const TOKENS_KEY = "agent_game_table_human_tokens_v1";
+  const PASSPHRASE_KEY = "agent_game_table_create_passphrase_v1";
   const tokens = readTokenMap();
   const requestedTableId = new URL(window.location.href).searchParams.get("table") || "";
   const soleTableId = Object.keys(tokens).length === 1 ? Object.keys(tokens)[0] : "";
@@ -23,7 +24,7 @@
     [
       "connectionBadge", "setupPanel", "createForm", "joinForm", "joinHumanName", "humanJoinCode", "humanName", "tablePanel", "joinCode", "copyInvite",
       "pileZone", "pileLabel", "pileCards", "roundLabel", "turnLabel", "playerSeats", "startRound", "playCards", "pass", "selectedCount",
-      "seatCount", "roster", "chatLog", "chatForm", "chatInput", "statusLine", "remoteAccessLabel", "remoteAccessKey",
+      "seatCount", "roster", "chatLog", "chatForm", "chatInput", "statusLine", "passphraseLabel", "createPassphrase", "adminKeyLabel", "adminKey",
       "managementPanel", "managementList", "managedTableCount", "managementHint", "refreshTables", "backToTables",
       "tableStatus", "roundCelebration", "roundCelebrationAnimation", "roundCelebrationLabel", "optionBombs", "optionSameKind", "ruleOptions", "tableName", "railToggle", "rail", "handDock", "seatButton", "unseatButton", "dockNote", "spectatorList", "spectatorCount",
     ].map((id) => [id, document.getElementById(id)]),
@@ -62,8 +63,9 @@
           },
         },
         authenticated: false,
-        humanAccess: true,
+        createPassphrase: true,
       });
+      rememberPassphrase();
       rememberHumanToken(result.table.table_id, result.human_token);
       selectTable(result.table.table_id, result.human_token);
       setTable(result.table);
@@ -79,7 +81,6 @@
         method: "POST",
         body: { join_code: elements.humanJoinCode.value.trim(), human_name: elements.joinHumanName.value.trim() },
         authenticated: false,
-        humanAccess: true,
       });
       rememberHumanToken(result.table.table_id, result.human_token);
       selectTable(result.table.table_id, result.human_token);
@@ -92,6 +93,7 @@
   elements.refreshTables.addEventListener("click", () => void run(loadManagement));
   elements.backToTables.addEventListener("click", () => {
     showManagement();
+    if (state.remote && !elements.adminKey.value) return;
     void loadManagement().catch((error) => setStatus(error.message, true));
   });
 
@@ -359,6 +361,15 @@
     }
   }
 
+  function rememberPassphrase() {
+    if (!state.remote) return;
+    try { localStorage.setItem(PASSPHRASE_KEY, elements.createPassphrase.value); } catch { /* 私密模式沒有儲存空間也沒關係 */ }
+  }
+
+  function restorePassphrase() {
+    try { elements.createPassphrase.value = localStorage.getItem(PASSPHRASE_KEY) || ""; } catch { /* 同上 */ }
+  }
+
   function rememberHumanToken(tableId, token) {
     state.tokens[tableId] = token;
     localStorage.setItem(TOKENS_KEY, JSON.stringify(state.tokens));
@@ -603,7 +614,8 @@
     const headers = { Accept: "application/json" };
     if (options.body) headers["Content-Type"] = "application/json";
     if (options.authenticated !== false) headers.Authorization = `Bearer ${state.token}`;
-    if (options.humanAccess && state.remote) headers["X-Agent-Game-Table-Human-Key"] = elements.remoteAccessKey.value;
+    if (options.humanAccess && state.remote) headers["X-Agent-Game-Table-Human-Key"] = elements.adminKey.value;
+    if (options.createPassphrase && state.remote) headers["X-Agent-Game-Table-Passphrase"] = elements.createPassphrase.value;
     const response = await fetch(path, {
       method: options.method,
       headers,
@@ -656,8 +668,10 @@
     .then((response) => (response.ok ? response.json() : null))
     .then((config) => {
       state.remote = Boolean(config?.remote);
-      elements.remoteAccessLabel.hidden = !state.remote;
-      elements.remoteAccessKey.required = state.remote;
+      elements.passphraseLabel.hidden = !state.remote;
+      elements.createPassphrase.required = state.remote;
+      elements.adminKeyLabel.hidden = !state.remote;
+      if (state.remote) restorePassphrase();
       if (!state.token && !state.remote) return loadManagement();
       return null;
     })

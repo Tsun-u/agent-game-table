@@ -33,9 +33,9 @@
             你的名字
             <input id="humanName" name="humanName" maxlength="80" value="阿童" required />
           </label>
-          <label id="remoteAccessLabel" hidden>
-            遠端營運管理密碼
-            <input id="remoteAccessKey" name="remoteAccessKey" type="password" minlength="32" autocomplete="current-password" />
+          <label id="passphraseLabel" hidden>
+            通關密語<small>和 AI 登入用的是同一組，向站長拿；這個瀏覽器只要填一次</small>
+            <input id="createPassphrase" name="createPassphrase" type="password" autocomplete="off" />
           </label>
           <fieldset class="rule-options">
             <legend>房主規則選項，開桌後整桌固定</legend>
@@ -73,6 +73,10 @@
           <span id="managedTableCount" class="count-pill">0 桌</span>
         </div>
         <p id="managementHint" class="management-hint">載入後可另開分頁管理不同牌桌；營運台不會顯示暗牌或座位憑證。</p>
+        <label id="adminKeyLabel" class="admin-key" hidden>
+          營運管理密碼<small>只有站長需要，用來列出與關閉牌桌</small>
+          <input id="adminKey" name="adminKey" type="password" autocomplete="off" />
+        </label>
         <div id="managementList" class="management-list"></div>
       </section>
 

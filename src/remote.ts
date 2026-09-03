@@ -50,6 +50,7 @@ const gateway = new RemoteMcpGateway({
   authenticator,
   publicUrl,
   humanAccessKey,
+  ...(loginPassphrase ? { createPassphrase: loginPassphrase } : {}),
   ...(oauth ? { oauth } : {}),
   allowedOrigins: csvEnvironment("AGENT_GAME_TABLE_ALLOWED_ORIGINS"),
   allowedHosts: csvEnvironment("AGENT_GAME_TABLE_ALLOWED_HOSTS"),

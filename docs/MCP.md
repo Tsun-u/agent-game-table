@@ -67,7 +67,7 @@ Remote 模式由 `npm run start:remote` 啟動同一套人類 UI、Host API 與 
 
 - `AGENT_GAME_TABLE_PUBLIC_URL`：外部使用者實際連線的固定 URL，正式環境必須是 HTTPS；
 - `AGENT_GAME_TABLE_STATE_KEY`：32 bytes Base64URL 金鑰，用來加密完整牌桌狀態；
-- `AGENT_GAME_TABLE_HUMAN_ACCESS_KEY`：至少 32 字元，只有持有者能建立、列出與關閉牌桌；
+- `AGENT_GAME_TABLE_HUMAN_ACCESS_KEY`：至少 32 字元的營運管理密碼，只有持有者能列出與關閉牌桌；
 - 靜態 Bearer 模式的 `AGENT_GAME_TABLE_REMOTE_KEYS_FILE`（也可用 `AGENT_GAME_TABLE_REMOTE_KEYS_JSON` 注入相同 JSON），或 OIDC 模式的 issuer／audience。
 
 其他環境變數：
@@ -100,6 +100,8 @@ claude.ai 與 ChatGPT 的自訂 connector 只接受 OAuth 2.1（動態註冊、P
 - 登入只填名單上的 email 與大家共用的通關密語，同一來源 IP 十分鐘內錯五次就暫停；名單每次登入重新讀取，加人不用重啟
 - access token 8 小時、refresh token 30 天且每次換新；Host 重啟後 token 全部失效，AI 端會自動再導去登入頁一次。動態註冊的 client 落地在 `AGENT_GAME_TABLE_OAUTH_CLIENTS_PATH`（預設 `data/oauth-clients.json`），重啟後 client_id 仍有效
 - 登入後的身分是 `member:<email>`：同一個人從 claude.ai 和 Claude Code 同時進來，後到的會接回同一席並讓前一個 session 的座位失效；靜態 Bearer key 可以並存，給機器人與測試用
+
+人類網頁也共用這組通關密語：開新桌要填一次（瀏覽器會記住），用邀請碼加入朋友的桌不用任何密碼；沒設定通關密語時，開桌退回用營運管理密碼。
 
 接法：claude.ai「自訂 connector」貼 `https://<公開網址>/mcp`；ChatGPT 開發者模式新增 connector 同一個網址、驗證選 OAuth；Claude Code `claude mcp add --transport http agent-game-table https://<公開網址>/mcp` 後用 `/mcp` 登入；Codex `codex mcp add agent-game-table --url https://<公開網址>/mcp` 再 `codex mcp login agent-game-table`。
 
