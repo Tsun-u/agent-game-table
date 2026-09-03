@@ -25,16 +25,42 @@
       "pileZone", "pileLabel", "pileCards", "roundLabel", "turnLabel", "playerSeats", "startRound", "playCards", "pass", "selectedCount",
       "seatCount", "roster", "chatLog", "chatForm", "chatInput", "statusLine", "remoteAccessLabel", "remoteAccessKey",
       "managementPanel", "managementList", "managedTableCount", "managementHint", "refreshTables", "backToTables",
-      "tableStatus", "roundCelebration", "roundCelebrationAnimation", "roundCelebrationLabel",
+      "tableStatus", "roundCelebration", "roundCelebrationAnimation", "roundCelebrationLabel", "optionBombs", "optionSameKind", "ruleOptions", "tableName", "railToggle", "rail", "handDock", "seatButton", "unseatButton", "dockNote", "spectatorList", "spectatorCount",
     ].map((id) => [id, document.getElementById(id)]),
   );
+
+  elements.seatButton.addEventListener("click", () => void changeSeat("/api/human/seat", "已入座，等房主開局。"));
+  elements.unseatButton.addEventListener("click", () => void changeSeat("/api/human/unseat", "已到觀戰區。"));
+
+  async function changeSeat(path, message) {
+    await run(async () => {
+      const result = await api(path, {
+        method: "POST",
+        body: { expected_version: state.table.version, idempotency_key: `seat-${crypto.randomUUID()}` },
+      });
+      state.selectedCards.clear();
+      setTable(result.table);
+      setStatus(message);
+    });
+  }
+
+  elements.railToggle.addEventListener("click", () => {
+    const open = elements.rail.classList.toggle("open");
+    elements.railToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  });
 
   elements.createForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     await run(async () => {
       const result = await api("/api/tables", {
         method: "POST",
-        body: { human_name: elements.humanName.value.trim() },
+        body: {
+          human_name: elements.humanName.value.trim(),
+          options: {
+            bombs_beat_anything: elements.optionBombs.checked,
+            five_card_same_kind_only: elements.optionSameKind.checked,
+          },
+        },
         authenticated: false,
         humanAccess: true,
       });
@@ -71,7 +97,7 @@
 
   elements.copyInvite.addEventListener("click", async () => {
     if (!state.table) return;
-    const prompt = `Agent Game Table 牌桌邀請碼：${state.table.join_code}\n\n人類玩家：開啟 ${window.location.origin}${window.location.pathname}，在「加入朋友的桌」輸入名字與邀請碼。\n\nAI Agent：請使用 agent-game-table MCP，先呼叫 get_game_rules 讀取完整大老二規則，再以你的名字加入牌桌 ${state.table.join_code}。輪到你時只從 legal_plays 選一組 cards 原樣傳給 play_cards，或在 legal_actions 允許時 PASS；不是你的回合時呼叫 wait_for_table_event。`;
+    const prompt = `Agent Game Table 牌桌邀請碼：${state.table.join_code}\n\n人類玩家：開啟 ${window.location.origin}${window.location.pathname}，在「加入朋友的桌」輸入名字與邀請碼，進桌後按「入座」。\n\nAI Agent：請使用 agent-game-table MCP，先呼叫 get_game_rules 讀取完整大老二規則，再以你的名字 join_table 加入牌桌 ${state.table.join_code}，接著呼叫 take_seat 入座。輪到你時只從 legal_plays 選一組 cards 原樣傳給 play_cards，或在 legal_actions 允許時 PASS；不是你的回合時呼叫 wait_for_table_event。局間若人類請你讓位，用 leave_seat 到觀戰區繼續看牌聊天。`;
     await navigator.clipboard.writeText(prompt);
     setStatus("邀請詞已複製，可以直接貼給 Codex 或 Claude Code。");
   });
@@ -200,7 +226,17 @@
   async function refresh(force = false) {
     if (!state.token || (state.busy && !force)) return;
     const result = await api("/api/human/table", { method: "GET" });
+    if (!force && isSameSnapshot(state.table, result.table)) return;
     setTable(result.table);
+  }
+
+  // 輪詢拿到一模一樣的牌桌就不重畫，手牌捲軸和選牌狀態才不會每 0.8 秒被重置。
+  function isSameSnapshot(previous, next) {
+    return Boolean(previous)
+      && previous.table_id === next.table_id
+      && previous.version === next.version
+      && previous.last_event_id === next.last_event_id
+      && previous.phase === next.phase;
   }
 
   function startPolling() {
@@ -212,6 +248,13 @@
       }
       setStatus(error.message, true);
     }), 800);
+  }
+
+  function describeRuleOptions(options) {
+    const enabled = [];
+    if (options?.bombs_beat_anything) enabled.push("鐵支同花順全壓");
+    if (options?.five_card_same_kind_only) enabled.push("五張同牌型互壓");
+    return enabled.length ? `房主選項：${enabled.join("、")}` : "房主選項：台灣標準（五張只能被五張壓、葫蘆可壓順子）";
   }
 
   function setTable(table) {
@@ -230,6 +273,8 @@
     elements.connectionBadge.textContent = state.remote ? "Remote 共桌已連線" : "本機共桌已連線";
     elements.connectionBadge.classList.add("online");
     elements.joinCode.textContent = table.join_code;
+    elements.tableName.textContent = `${table.owner_name}的牌桌`;
+    elements.ruleOptions.textContent = describeRuleOptions(table.rule_options);
     elements.roundLabel.textContent = table.round ? `第 ${table.round} 局 · ${table.rule_label}` : `${table.rule_label} · 等待開局`;
     elements.seatCount.textContent = String(table.players.length);
 
@@ -252,6 +297,17 @@
   }
 
   function syncActionButtons(table) {
+    const spectating = table.viewer_role === "spectator";
+    elements.seatButton.hidden = !table.legal_actions.includes("take_seat");
+    elements.unseatButton.hidden = !table.legal_actions.includes("leave_seat");
+    elements.seatButton.disabled = state.busy;
+    elements.unseatButton.disabled = state.busy;
+    elements.dockNote.hidden = !spectating;
+    elements.dockNote.textContent = table.phase === "player_turns"
+      ? "你在觀戰區看這一局。等這局結束就可以入座。"
+      : table.players.length >= 4
+        ? "你在觀戰區。四個座位都滿了，等有人起身再入座。"
+        : "你在觀戰區。按「入座」加入下一局。";
     elements.startRound.hidden = !table.legal_actions.includes("start_round");
     elements.playCards.hidden = table.phase !== "player_turns";
     elements.pass.hidden = table.phase !== "player_turns";
@@ -325,14 +381,18 @@
   }
 
   function renderPlayers(table, previousTable) {
-    elements.playerSeats.replaceChildren(...table.players.map((seat) => {
+    const previousHand = elements.handDock.querySelector(".player-seat.yours .cards");
+    const handScrollLeft = previousHand ? previousHand.scrollLeft : 0;
+    const seats = table.players.map((seat) => {
       const article = document.createElement("article");
       const active = seat.seat_id === table.active_seat_id;
       const turnEntered = active && previousTable && previousTable.active_seat_id !== table.active_seat_id;
       article.className = `player-seat${active ? " active" : ""}${seat.is_you ? " yours" : ""}${turnEntered ? " turn-enter" : ""}`;
+      article.dataset.status = seat.status;
       const heading = document.createElement("div");
       heading.className = "seat-heading";
       const name = document.createElement("strong");
+      name.dataset.kind = seat.kind === "human" ? "人" : "AI";
       name.textContent = `${seat.name}${seat.is_you ? "（你）" : ""}`;
       const points = document.createElement("span");
       points.textContent = `${seat.hand_count} 張 · ${seat.game_score} 分`;
@@ -359,21 +419,34 @@
       result.textContent = resultText(seat, table.phase);
       article.append(heading, cards, result);
       return article;
-    }));
+    });
+    // 自己的座位放在底部手牌區，其他人是舞台上的一排名牌。
+    elements.playerSeats.replaceChildren(...seats.filter((article) => !article.classList.contains("yours")));
+    elements.handDock.querySelector(".player-seat.yours")?.remove();
+    const yours = seats.find((article) => article.classList.contains("yours"));
+    if (yours) elements.handDock.prepend(yours);
+    const hand = elements.handDock.querySelector(".player-seat.yours .cards");
+    if (hand && handScrollLeft) hand.scrollLeft = handScrollLeft;
   }
 
   function renderRoster(table) {
-    elements.roster.replaceChildren(...table.players.map((seat) => {
+    elements.spectatorCount.textContent = String(table.spectators.length);
+    elements.roster.replaceChildren(...table.players.map((seat) => rosterRow(table, seat, "seated")));
+    elements.spectatorList.replaceChildren(...table.spectators.map((seat) => rosterRow(table, seat, "spectator")));
+  }
+
+  function rosterRow(table, seat, role) {
+    {
       const row = document.createElement("div");
-      row.className = "roster-row";
+      row.className = `roster-row ${role}`;
       const dot = document.createElement("span");
       dot.className = `roster-dot ${seat.kind}`;
       const label = document.createElement("span");
       label.textContent = seat.name;
       const kind = document.createElement("small");
-      kind.textContent = seat.kind === "human" ? "人類" : "Agent";
+      kind.textContent = `${seat.kind === "human" ? "人類" : "Agent"}${seat.is_you ? "（你）" : ""}`;
       row.append(dot, label, kind);
-      if (seat.kind === "agent" && table.players[0]?.is_you) {
+      if (seat.kind === "agent" && table.viewer_is_owner) {
         const reconnect = document.createElement("button");
         reconnect.type = "button";
         reconnect.className = "seat-reconnect";
@@ -391,7 +464,7 @@
         row.append(reconnect, remove);
       }
       return row;
-    }));
+    }
   }
 
   async function createReconnectPrompt(seat) {
@@ -426,7 +499,7 @@
     const nearBottom = elements.chatLog.scrollHeight - elements.chatLog.scrollTop - elements.chatLog.clientHeight < 40;
     elements.chatLog.replaceChildren(...table.recent_chat.map((message) => {
       const bubble = document.createElement("div");
-      bubble.className = `chat-bubble ${message.speaker_kind}`;
+      bubble.className = `chat-bubble ${message.speaker_kind}${message.speaker_role === "spectator" ? " spectator" : ""}`;
       const name = document.createElement("strong");
       name.textContent = message.speaker;
       const text = document.createElement("p");

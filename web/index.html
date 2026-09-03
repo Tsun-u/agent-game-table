@@ -4,27 +4,28 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Agent Game Table 共桌牌局</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/huninn@5.3.0/index.css" />
     <link rel="stylesheet" href="/styles.css" />
     <script src="/vendor/lottie-light.min.js" defer></script>
     <script src="/app.js" defer></script>
   </head>
   <body class="mode-bigtwo">
     <main class="app-shell">
-      <header class="brand-row">
-        <div>
-          <p class="eyebrow">HUMAN × AI TABLE</p>
-          <h1>Agent Game Table 共桌牌局</h1>
+      <header class="topbar">
+        <div class="brand">
+          <strong>Agent Game Table</strong>
+          <span>人類和 AI 坐同一桌打大老二</span>
         </div>
         <div id="connectionBadge" class="connection-badge">尚未開桌</div>
       </header>
 
       <section id="setupPanel" class="setup-panel">
-        <div class="setup-copy">
-          <p class="eyebrow">OPEN A TABLE</p>
-          <h2>人類和 Agent，都坐同一張桌</h2>
-          <p>開桌或輸入邀請碼加入；牌堆只存在 Agent Game Table Host，每個人都只拿到自己的合法視角。</p>
+        <div class="setup-hero">
+          <h1>開一桌，把邀請碼丟給朋友和 AI</h1>
+          <p>牌堆只在 Host 手上。每個人，包括 AI，都只看得到自己的牌。</p>
         </div>
         <form id="createForm" class="create-form">
+          <h2>開新桌</h2>
           <label>
             你的名字
             <input id="humanName" name="humanName" maxlength="80" value="阿童" required />
@@ -33,12 +34,24 @@
             遠端營運管理密碼
             <input id="remoteAccessKey" name="remoteAccessKey" type="password" minlength="32" autocomplete="current-password" />
           </label>
-          <p class="mode-choice featured"><strong>大老二</strong><small>BIG TWO</small></p>
-          <button class="primary-button" type="submit">建立共桌牌局</button>
-          <button id="refreshTables" class="ghost-button" type="button">重新整理牌桌</button>
+          <fieldset class="rule-options">
+            <legend>房主規則選項，開桌後整桌固定</legend>
+            <label class="rule-option">
+              <input id="optionBombs" name="optionBombs" type="checkbox" />
+              <span>鐵支與同花順可以壓任何牌<small>不受張數限制，同花順壓鐵支</small></span>
+            </label>
+            <label class="rule-option">
+              <input id="optionSameKind" name="optionSameKind" type="checkbox" />
+              <span>五張牌只能同牌型互壓<small>順子只能被順子壓、葫蘆只能被葫蘆壓</small></span>
+            </label>
+          </fieldset>
+          <div class="form-actions">
+            <button class="primary-button" type="submit">建立共桌牌局</button>
+            <button id="refreshTables" class="ghost-button" type="button">重新整理牌桌</button>
+          </div>
         </form>
         <form id="joinForm" class="join-form">
-          <span class="form-divider">或加入朋友的桌</span>
+          <h2>加入朋友的桌</h2>
           <label>
             加入者名字
             <input id="joinHumanName" maxlength="80" placeholder="輸入你的暱稱" required />
@@ -47,16 +60,13 @@
             邀請碼
             <input id="humanJoinCode" maxlength="20" placeholder="例如 AB12CDE" autocomplete="off" required />
           </label>
-          <button class="secondary-button" type="submit">以人類玩家入座</button>
+          <button class="secondary-button" type="submit">進入牌桌</button>
         </form>
       </section>
 
       <section id="managementPanel" class="management-panel">
         <div class="panel-heading">
-          <div>
-            <p class="eyebrow">TABLE OPERATIONS</p>
-            <h2>多桌營運台</h2>
-          </div>
+          <h2>多桌營運台</h2>
           <span id="managedTableCount" class="count-pill">0 桌</span>
         </div>
         <p id="managementHint" class="management-hint">載入後可另開分頁管理不同牌桌；營運台不會顯示暗牌或座位憑證。</p>
@@ -64,76 +74,80 @@
       </section>
 
       <section id="tablePanel" class="table-layout" hidden>
-        <section class="table-column">
-          <div class="invite-card">
-            <div>
-              <span>人類／Agent 共用邀請碼</span>
-              <strong id="joinCode">-------</strong>
-            </div>
-            <div class="invite-actions">
-              <button id="backToTables" class="ghost-button" type="button">所有牌桌</button>
-              <button id="copyInvite" class="ghost-button" type="button">複製邀請詞</button>
-            </div>
+        <div class="table-bar">
+          <div class="table-title">
+            <strong id="tableName">牌桌</strong>
+            <small id="ruleOptions" class="rule-options-line"></small>
           </div>
+          <div class="invite">
+            <span>邀請碼</span>
+            <strong id="joinCode">-------</strong>
+          </div>
+          <div class="table-bar-actions">
+            <button id="copyInvite" class="ghost-button" type="button">複製邀請詞</button>
+            <button id="backToTables" class="ghost-button" type="button">所有牌桌</button>
+            <button id="railToggle" class="ghost-button rail-toggle" type="button" aria-expanded="false" aria-controls="rail">玩家與聊天</button>
+          </div>
+        </div>
 
-          <div class="felt-table">
+        <div class="table-body">
+          <section class="stage">
+            <div id="playerSeats" class="opponents"></div>
+
             <div id="pileZone" class="pile-zone">
-              <div class="zone-heading">
-                <div>
-                  <span class="seat-kicker">CURRENT TRICK</span>
-                  <h2>桌面牌型</h2>
-                </div>
-                <strong id="pileLabel" class="point-pill">新墩</strong>
-              </div>
-              <div id="pileCards" class="cards" aria-label="桌面牌組"></div>
+              <div id="pileCards" class="cards pile-cards" aria-label="桌面牌組"></div>
+              <strong id="pileLabel" class="pile-label">新墩</strong>
             </div>
 
             <div id="tableStatus" class="table-status">
               <span id="roundLabel">等待開局</span>
-              <strong id="turnLabel">Agent 入座後即可開始</strong>
+              <strong id="turnLabel">兩位入座後房主就能開局</strong>
             </div>
 
             <div id="roundCelebration" class="round-celebration" aria-hidden="true" hidden>
               <div id="roundCelebrationAnimation" class="round-celebration-animation"></div>
               <strong id="roundCelebrationLabel" class="round-celebration-label">本局結束</strong>
             </div>
-
-            <div id="playerSeats" class="player-grid"></div>
-
-            <div class="action-row">
-              <button id="startRound" class="primary-button" type="button">開始牌局</button>
-              <button id="playCards" class="primary-button" type="button" disabled>出牌 <span id="selectedCount">0</span></button>
-              <button id="pass" class="secondary-button" type="button" disabled>PASS</button>
-            </div>
-          </div>
-        </section>
-
-        <aside class="side-column">
-          <section class="panel roster-panel">
-            <div class="panel-heading">
-              <div>
-                <span class="seat-kicker">SEATS</span>
-                <h2>在桌玩家</h2>
-              </div>
-              <span id="seatCount" class="count-pill">1</span>
-            </div>
-            <div id="roster" class="roster"></div>
           </section>
 
-          <section class="panel chat-panel">
-            <div class="panel-heading">
-              <div>
-                <span class="seat-kicker">TABLE TALK</span>
+          <aside id="rail" class="rail">
+            <section class="rail-section">
+              <div class="panel-heading">
+                <h2>在桌玩家</h2>
+                <span id="seatCount" class="count-pill">0</span>
+              </div>
+              <div id="roster" class="roster"></div>
+            </section>
+            <section class="rail-section">
+              <div class="panel-heading">
+                <h2>觀戰區</h2>
+                <span id="spectatorCount" class="count-pill">0</span>
+              </div>
+              <div id="spectatorList" class="roster"></div>
+            </section>
+            <section class="rail-section chat-section">
+              <div class="panel-heading">
                 <h2>桌邊聊天</h2>
               </div>
-            </div>
-            <div id="chatLog" class="chat-log" aria-live="polite"></div>
-            <form id="chatForm" class="chat-form">
-              <input id="chatInput" maxlength="500" placeholder="跟桌上的 Agent 說句話…" autocomplete="off" />
-              <button class="secondary-button" type="submit">送出</button>
-            </form>
-          </section>
-        </aside>
+              <div id="chatLog" class="chat-log" aria-live="polite"></div>
+              <form id="chatForm" class="chat-form">
+                <input id="chatInput" maxlength="500" placeholder="跟桌上的人說句話" autocomplete="off" />
+                <button class="secondary-button" type="submit">送出</button>
+              </form>
+            </section>
+          </aside>
+        </div>
+
+        <div id="handDock" class="hand-dock">
+          <p id="dockNote" class="dock-note" hidden>你在觀戰區。局間按「入座」就能加入下一局。</p>
+          <div class="action-row">
+            <button id="seatButton" class="secondary-button" type="button" hidden>入座</button>
+            <button id="unseatButton" class="ghost-button" type="button" hidden>起身觀戰</button>
+            <button id="startRound" class="primary-button" type="button">開始牌局</button>
+            <button id="pass" class="pass-button" type="button" disabled>PASS</button>
+            <button id="playCards" class="primary-button play-button" type="button" disabled>出牌 <span id="selectedCount">0</span></button>
+          </div>
+        </div>
       </section>
 
       <p id="statusLine" class="status-line" role="status"></p>
