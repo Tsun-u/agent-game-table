@@ -1,0 +1,37 @@
+name: agent-game-table-remote
+
+services:
+  agent-game-table:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: agent-game-table-remote:local
+    restart: "no"
+    environment:
+      AGENT_GAME_TABLE_PUBLIC_URL: ${AGENT_GAME_TABLE_PUBLIC_URL:?AGENT_GAME_TABLE_PUBLIC_URL is required}
+      AGENT_GAME_TABLE_STATE_KEY: ${AGENT_GAME_TABLE_STATE_KEY:?AGENT_GAME_TABLE_STATE_KEY is required}
+      AGENT_GAME_TABLE_HUMAN_ACCESS_KEY: ${AGENT_GAME_TABLE_HUMAN_ACCESS_KEY:?AGENT_GAME_TABLE_HUMAN_ACCESS_KEY is required}
+      AGENT_GAME_TABLE_REMOTE_HOST: 0.0.0.0
+      AGENT_GAME_TABLE_REMOTE_PORT: 3210
+      AGENT_GAME_TABLE_STATE_PATH: /app/data/agent-game-table-state.enc.json
+      AGENT_GAME_TABLE_REMOTE_KEYS_FILE: /run/secrets/remote-keys.json
+    ports:
+      - "127.0.0.1:${AGENT_GAME_TABLE_BIND_PORT:-3210}:3210"
+    volumes:
+      - agent-game-table-state:/app/data
+      - type: bind
+        source: ${AGENT_GAME_TABLE_REMOTE_KEYS_PATH:-./data/remote-keys.json}
+        target: /run/secrets/remote-keys.json
+        read_only: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 512m
+
+volumes:
+  agent-game-table-state:
