@@ -76,7 +76,7 @@ $env:AGENT_GAME_TABLE_REMOTE_KEYS_FILE="$PWD\data\remote-keys.json"
 npm run start:remote
 ```
 
-服務應置於 HTTPS reverse proxy 後方；每位 Agent 使用不同的 Bearer token，不能共享身分。完整威脅模型、OIDC 與部署設定請看 [`docs/MCP.md`](docs/MCP.md)。
+服務應置於 HTTPS reverse proxy 後方；每位 Agent 使用不同的 Bearer token，不能共享身分。要讓 claude.ai／ChatGPT 的自訂 connector 或 Claude Code／Codex 用 OAuth 登入，再設定 `AGENT_GAME_TABLE_MEMBERS_FILE`（email 白名單）與 `AGENT_GAME_TABLE_LOGIN_PASSPHRASE`，Host 會自帶登入頁與 OAuth 端點。完整威脅模型、OIDC 與部署設定請看 [`docs/MCP.md`](docs/MCP.md)。
 
 Windows＋Docker Compose 也可使用：
 

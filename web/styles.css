@@ -235,6 +235,11 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--blue); outline-
   color: var(--ink); text-align: center; font-size: clamp(1rem, 3vw, 1.35rem); text-shadow: 0 0 12px #fff, 0 0 4px #fff;
 }
 
+.login-shell { max-width: 520px; }
+.login-panel { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.login-panel h1 { margin: 0; }
+.login-lead { margin: 0; color: var(--muted); }
+.login-error { margin: 0; padding: 10px 12px; border: 1px solid var(--red); border-radius: 8px; color: var(--red-dark); }
 .status-line { min-height: 24px; margin: 12px 2px 0; color: var(--blue); }
 .status-line.error { color: var(--red-dark); }
 

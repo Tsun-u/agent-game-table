@@ -24,9 +24,15 @@ interface RemoteSession {
   readonly server: McpServer;
 }
 
+export interface RemoteOAuthEndpoints {
+  handle(request: IncomingMessage, response: ServerResponse): Promise<boolean>;
+}
+
 export interface RemoteMcpGatewayOptions {
   readonly store: MultiplayerTableStore;
   readonly authenticator: RemoteAuthenticator;
+  /** Host 自帶的 OAuth Authorization Server；有設定時 /oauth/* 與 AS metadata 由它處理。 */
+  readonly oauth?: RemoteOAuthEndpoints;
   readonly publicUrl: string;
   readonly allowedOrigins?: string[];
   readonly allowedHosts?: string[];
@@ -42,6 +48,7 @@ export class RemoteMcpGateway {
   readonly #allowedOrigins: Set<string>;
   readonly #allowedHosts: Set<string>;
   readonly #humanAccessKeyHash: Buffer;
+  readonly #oauth: RemoteOAuthEndpoints | null;
   readonly #sessions = new Map<string, RemoteSession>();
 
   constructor(options: RemoteMcpGatewayOptions) {
@@ -55,10 +62,18 @@ export class RemoteMcpGateway {
     this.#allowedHosts = new Set([this.#publicUrl.host.toLowerCase(), ...(options.allowedHosts ?? []).map((host) => host.toLowerCase())]);
     if (options.humanAccessKey.trim().length < 32) throw new Error("AGENT_GAME_TABLE_HUMAN_ACCESS_KEY 至少需要 32 個字元。");
     this.#humanAccessKeyHash = hashSecret(options.humanAccessKey.trim());
+    this.#oauth = options.oauth ?? null;
   }
 
   async handle(request: IncomingMessage, response: ServerResponse): Promise<boolean> {
     const url = new URL(request.url ?? "/", this.#publicUrl);
+    if (this.#oauth && (url.pathname.startsWith("/oauth/") || url.pathname === "/.well-known/oauth-authorization-server")) {
+      if (!this.#validHost(request)) {
+        sendJson(response, 403, { error: "untrusted_host" });
+        return true;
+      }
+      return this.#oauth.handle(request, response);
+    }
     if (request.method === "GET" && url.pathname === "/api/remote-config") {
       sendJson(response, 200, { remote: true, human_access_key_required: true, table_management: true });
       return true;

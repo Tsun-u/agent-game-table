@@ -55,7 +55,11 @@ export async function startAgentGameTableHost(options: AgentGameTableHostOptions
     hostname,
     port: address.port,
     url: `http://${hostname}:${address.port}`,
-    close: () => new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
+    // 瀏覽器與 fetch 的 keep-alive 連線會讓 server.close() 永遠等不到，所以一併關掉所有連線。
+    close: () => new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+      server.closeAllConnections();
+    }),
   };
 }
 

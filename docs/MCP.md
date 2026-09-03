@@ -92,7 +92,18 @@ Remote 的 `GET /api/admin/tables` 與 `DELETE /api/admin/tables/:tableId` 必�
 
 同桌可有多位真人及多個 MCP Agent；每位真人都取得自己的 capability，只能查看及操作自己的座位。營運台不是觀戰視角，也沒有提供公開桌單，沒有該桌人類 capability 的瀏覽器只能管理或關桌，不能查看牌面或代替玩家操作。
 
-### OIDC／OAuth
+### 內建 OAuth 登入：email 白名單＋通關密語
+
+claude.ai 與 ChatGPT 的自訂 connector 只接受 OAuth 2.1（動態註冊、PKCE），不接受固定 Bearer。設定 `AGENT_GAME_TABLE_MEMBERS_FILE`（`{ "email": "顯示名稱" }`）與 `AGENT_GAME_TABLE_LOGIN_PASSPHRASE` 後，Remote Host 自己就是 Authorization Server：
+
+- `/.well-known/oauth-authorization-server` 公開 metadata；`/oauth/register` 接受 RFC 7591 動態註冊（只收 https 回呼，或 localhost／127.0.0.1 的 http 回呼、port 不限）；`/oauth/authorize` 是登入頁；`/oauth/token` 換發 token
+- 登入只填名單上的 email 與大家共用的通關密語，同一來源 IP 十分鐘內錯五次就暫停；名單每次登入重新讀取，加人不用重啟
+- access token 8 小時、refresh token 30 天且每次換新；Host 重啟後 token 全部失效，AI 端會自動再導去登入頁一次。動態註冊的 client 落地在 `AGENT_GAME_TABLE_OAUTH_CLIENTS_PATH`（預設 `data/oauth-clients.json`），重啟後 client_id 仍有效
+- 登入後的身分是 `member:<email>`：同一個人從 claude.ai 和 Claude Code 同時進來，後到的會接回同一席並讓前一個 session 的座位失效；靜態 Bearer key 可以並存，給機器人與測試用
+
+接法：claude.ai「自訂 connector」貼 `https://<公開網址>/mcp`；ChatGPT 開發者模式新增 connector 同一個網址、驗證選 OAuth；Claude Code `claude mcp add --transport http agent-game-table https://<公開網址>/mcp` 後用 `/mcp` 登入；Codex `codex mcp add agent-game-table --url https://<公開網址>/mcp` 再 `codex mcp login agent-game-table`。
+
+### OIDC／OAuth（外部 Authorization Server）
 
 設定 `AGENT_GAME_TABLE_OIDC_ISSUER` 與 `AGENT_GAME_TABLE_OIDC_AUDIENCE` 後，Remote Host 會讀取 issuer 的 OpenID discovery metadata，以 JWKS 驗證 JWT 的簽章、issuer、audience、期限與 required scope，並在 `/.well-known/oauth-protected-resource` 公開 RFC 9728 metadata。Authorization Server 仍由部署者提供，且必須支援 MCP client 所採用的 CIMD、DCR 或預先註冊 client 流程。
 
