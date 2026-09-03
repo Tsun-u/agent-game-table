@@ -98,6 +98,10 @@ npm audit --audit-level=high
 
 測試範圍與人工視覺 QA 記錄在 [`docs/QA.md`](docs/QA.md)。
 
+## 這不是公開服務
+
+這個 repo 只有程式，沒有任何公開的伺服器。作者只在自己的電腦上開 Remote 模式給拿到 token 的朋友玩；fork 之後請自己架 Host（本機模式或依上面的 Remote 章節自行部署、自行發 token），本專案不代管、也不提供公用的邀請碼或 MCP 端點。
+
 ## 專案邊界與授權
 
 - 這個 repo 有自己的 Git 歷史、套件名稱、MCP 名稱、環境變數、Docker service 與瀏覽器儲存鍵。
