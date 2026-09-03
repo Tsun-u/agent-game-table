@@ -53,9 +53,10 @@ claude mcp add --transport stdio --scope user agent-game-table -- node D:\絕對
 UI 的「複製 Agent 邀請詞」會產生可直接貼給 Agent 的提示。也可以自行說：
 
 ```text
-請使用 agent-game-table MCP，以「小葵」加入牌桌 ABCDEFG。加入後先打招呼，
-只執行 legal_actions 中的動作：用 play_cards（附 cards）或 pass；否則用 wait_for_table_event
-等待其他玩家，持續到本局結束。
+請使用 agent-game-table MCP，先呼叫 get_game_rules 讀取完整大老二規則，
+再以「小葵」加入牌桌 ABCDEFG。加入後先打招呼；輪到你時只從 legal_plays
+挑選一組 cards 原樣交給 play_cards，或在 legal_actions 允許時 pass；否則用
+wait_for_table_event 等待其他玩家，持續到本局結束。
 ```
 
 若要多個 Agent，同一組邀請碼分別交給各個 MCP client 即可；每個 client 都會取得不同座位與不同的未讀事件游標。
@@ -148,14 +149,21 @@ Agent instructions 會要求它持續參與後續牌局，直到人類結束測�
 
 | Tool | 用途 |
 | --- | --- |
+| `get_game_rules` | 入座或出牌前讀取目前版本的完整大老二 house rules，不包含任何牌桌暗牌 |
 | `join_table` | 用邀請碼取得新座位，或搭配人類提供的 `reconnect_code` 接回原座位 |
-| `get_table_view` | 讀取最新公開牌桌、自己的座位與合法動作 |
+| `get_table_view` | 讀取最新公開牌桌、自己的座位、合法動作與本回合所有 `legal_plays` |
 | `leave_table` | 永久離桌、撤銷座位 token，並讓同一 process 可以加入其他牌桌 |
 | `take_action` | 輪到自己時執行 `play_cards`／`pass` |
 | `say_at_table` | 對人類與其他 Agent 說話，不消耗出牌回合 |
 | `wait_for_table_event` | 等候其他座位或牌局產生事件 |
 
 遊戲寫入必須帶最新的 `expected_version` 與新的 `idempotency_key`。版本不符時，Agent 要重讀牌桌後再決定；同一 idempotency key 的網路重試只會回放第一次結果，不會重複出牌。聊天不改變遊戲版本，避免一句話讓正在出牌的玩家產生不必要的版本衝突。
+
+### Agent 規則與合法牌組
+
+MCP 公開版本化的 `bigtwo-tw-1` 規則表，內容與 Host 實際判定一致，包含牌碼、點數與花色順序、發牌方式、首攻、合法牌型、五張牌型比較、PASS／收墩流程及計分。`get_game_rules` 可在尚未入座時呼叫；`join_table` 成功時也會再次附上完整規則，避免 Agent 略過規則便開始猜。
+
+只有輪到 Agent 行動時，`table.legal_plays` 才會列出牌組。每個項目包含 `cards` 與 `hand_type`，且已同時通過牌型、首攻必帶牌與壓過桌面牌組的檢查；Agent 應依自己的策略選擇其中一項，但不得自行修改其中的牌碼。人類視角及非當前 Agent 的 `legal_plays` 為空陣列，避免無用的大型回傳。
 
 ## 真雙盲邊界
 

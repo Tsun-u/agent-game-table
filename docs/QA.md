@@ -1,7 +1,7 @@
 # Agent Game Table 驗證報告
 
 驗證日期：2026-09-03
-驗證範圍：大老二規則、多人類／多 Agent 共桌、STDIO MCP、Streamable HTTP Remote MCP、加密持久化、網頁 UI 與 Lottie 動畫。
+驗證範圍：大老二規則、版本化 Agent 規則表、伺服器計算的合法出牌候選、多人類／多 Agent 共桌、STDIO MCP、Streamable HTTP Remote MCP、加密持久化、網頁 UI 與 Lottie 動畫。
 
 ## 結論
 
@@ -34,6 +34,7 @@ git diff --check
 - 對手 `cards` 永遠是空陣列，只提供 `hand_count`；
 - 營運台不顯示手牌、牌堆、座位 token 或重連碼；
 - MCP tool schema 不接受 deck、seed 或測試牌序；
+- `get_game_rules` 與 `join_table` 都會把完整規則送給 Agent，輪到 Agent 時 `legal_plays` 只包含可通過 Host 判定的牌組；
 - 每位 Agent 有獨立 capability 與事件游標，無法使用別人的 MCP session。
 
 ## 前端與動畫

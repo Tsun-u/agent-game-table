@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { bigTwoPlayBeats, classifyBigTwoPlay } from "../src/big-two.js";
+import { bigTwoPlayBeats, classifyBigTwoPlay, enumerateLegalBigTwoPlays } from "../src/big-two.js";
 import { createDeck, parseCard } from "../src/cards.js";
 import { MultiplayerTableStore } from "../src/multiplayer-store.js";
 
@@ -37,6 +37,19 @@ test("all supported five-card hands are classified and ranked", () => {
     "A-2-3-4-5 is the lowest straight",
   );
   assert.throws(() => classifyBigTwoPlay(cards("♦2", "♣3", "♥4", "♠5", "♦6")), /不是順子/);
+});
+
+test("legal play enumeration follows the opening card and current pile", () => {
+  const hand = cards("♦3", "♣3", "♥3", "♦4", "♣4", "♥5", "♠6", "♦7");
+  const opening = enumerateLegalBigTwoPlays(hand, null, "♦3");
+  assert.equal(opening.length > 0, true);
+  assert.equal(opening.every((play) => play.cards.some((card) => card.code === "♦3")), true);
+  assert.equal(opening.some((play) => play.cards.map((card) => card.code).join(" ") === "♦3 ♣3"), true);
+
+  const current = classifyBigTwoPlay(cards("♣4"));
+  const replies = enumerateLegalBigTwoPlays(hand, current, null);
+  assert.equal(replies.every((play) => play.cards.length === 1 && bigTwoPlayBeats(play, current)), true);
+  assert.deepEqual(replies.map((play) => play.cards[0]?.code), ["♥5", "♠6", "♦7"]);
 });
 
 test("four mixed human and Agent seats never expose opponents' cards", () => {

@@ -40,7 +40,7 @@ codex mcp add agent-game-table -- node D:\絕對路徑\agent-game-table\dist\src
 claude mcp add --transport stdio --scope user agent-game-table -- node D:\絕對路徑\agent-game-table\dist\src\index.js
 ```
 
-在人類 UI 按「複製邀請詞」交給 Agent。Agent 會使用 `join_table` 入座，再依 `legal_actions` 呼叫 `play_cards`、`pass` 或 `wait_for_table_event`。
+在人類 UI 按「複製邀請詞」交給 Agent。Agent 會先呼叫 `get_game_rules` 讀取版本化完整規則，再使用 `join_table` 入座；`join_table` 的成功回傳也會附上同一份規則，確保第一次出牌前已收到規則表。輪到 Agent 時，Host 會在 `legal_plays` 列出所有可合法送出的牌組；Agent 應從中選一組原樣傳給 `play_cards`，或依 `legal_actions` 使用 `pass`／`wait_for_table_event`。
 
 ## Remote MCP
 

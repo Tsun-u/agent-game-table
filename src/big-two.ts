@@ -74,7 +74,32 @@ export function classifyBigTwoPlay(cards: readonly Card[]): BigTwoPlay {
 export function bigTwoPlayBeats(candidate: BigTwoPlay, current: BigTwoPlay): boolean {
   if (candidate.cards.length !== current.cards.length) return false;
   if (candidate.cards.length < 5 && candidate.kind !== current.kind) return false;
-  return compareScores(candidate.score, current.score) > 0;
+  return compareBigTwoPlays(candidate, current) > 0;
+}
+
+export function compareBigTwoPlays(left: BigTwoPlay, right: BigTwoPlay): number {
+  return compareScores(left.score, right.score);
+}
+
+export function enumerateLegalBigTwoPlays(
+  hand: readonly Card[],
+  current: BigTwoPlay | null,
+  openingRequiredCard: string | null,
+): BigTwoPlay[] {
+  const sizes = current ? [current.cards.length] : [1, 2, 3, 5];
+  const plays: BigTwoPlay[] = [];
+  for (const size of sizes) {
+    for (const selection of combinations(sortBigTwoCards(hand), size)) {
+      if (openingRequiredCard && !selection.some((card) => card.code === openingRequiredCard)) continue;
+      try {
+        const play = classifyBigTwoPlay(selection);
+        if (!current || bigTwoPlayBeats(play, current)) plays.push(play);
+      } catch {
+        // Most card combinations are not a legal Big Two hand.
+      }
+    }
+  }
+  return plays.sort((left, right) => left.cards.length - right.cards.length || compareBigTwoPlays(left, right));
 }
 
 export function bigTwoHandLabel(kind: BigTwoHandKind): string {
@@ -122,6 +147,25 @@ function compareScores(left: readonly number[], right: readonly number[]): numbe
     if (difference) return difference;
   }
   return 0;
+}
+
+function combinations(cards: readonly Card[], size: number): Card[][] {
+  const result: Card[][] = [];
+  const selection: Card[] = [];
+  const visit = (start: number): void => {
+    if (selection.length === size) {
+      result.push(selection.slice());
+      return;
+    }
+    const remaining = size - selection.length;
+    for (let index = start; index <= cards.length - remaining; index += 1) {
+      selection.push(cards[index]!);
+      visit(index + 1);
+      selection.pop();
+    }
+  };
+  visit(0);
+  return result;
 }
 
 function cardValue(card: Card): number {

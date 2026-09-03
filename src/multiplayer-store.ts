@@ -5,10 +5,12 @@ import {
   bigTwoHandLabel,
   bigTwoPlayBeats,
   classifyBigTwoPlay,
+  enumerateLegalBigTwoPlays,
   lowestBigTwoCard,
   sortBigTwoCards,
   type BigTwoPlay,
 } from "./big-two.js";
+import { BIG_TWO_RULES_VERSION } from "./big-two-rules.js";
 
 export type GameMode = "bigtwo";
 export type TablePhase = "lobby" | "player_turns" | "ended";
@@ -65,6 +67,7 @@ export interface PublicTableView {
   readonly join_code: string;
   readonly mode: GameMode;
   readonly rule_label: "大老二";
+  readonly rules_version: typeof BIG_TWO_RULES_VERSION;
   readonly phase: TablePhase;
   readonly version: number;
   readonly round: number;
@@ -79,6 +82,10 @@ export interface PublicTableView {
   };
   readonly set_aside_cards: string[];
   readonly legal_actions: PublicAction[];
+  readonly legal_plays: Array<{
+    readonly cards: string[];
+    readonly hand_type: string;
+  }>;
   readonly recent_chat: PublicChatMessage[];
   readonly last_event_id: number;
 }
@@ -702,9 +709,15 @@ export class MultiplayerTableStore {
       if (table.currentPlay && table.currentPlaySeatId !== viewer.id) legalActions.push("pass");
     }
     if (viewer.id === table.ownerSeatId && (table.phase === "lobby" || table.phase === "ended")) legalActions.push("start_round");
+    const legalPlays = viewer.kind === "agent" && table.phase === "player_turns" && table.activeSeatId === viewer.id
+      ? enumerateLegalBigTwoPlays(viewer.cards, table.currentPlay, table.openingRequiredCard).map((play) => ({
+        cards: play.cards.map((card) => card.code),
+        hand_type: bigTwoHandLabel(play.kind),
+      }))
+      : [];
     const pileSeat = table.currentPlaySeatId ? table.seats.find((seat) => seat.id === table.currentPlaySeatId) ?? null : null;
     return {
-      table_id: table.id, join_code: table.joinCode, mode: GAME_MODE, rule_label: "大老二", phase: table.phase,
+      table_id: table.id, join_code: table.joinCode, mode: GAME_MODE, rule_label: "大老二", rules_version: BIG_TWO_RULES_VERSION, phase: table.phase,
       version: table.version, round: table.round, viewer_seat_id: viewerSeatId, active_seat_id: table.activeSeatId,
       players: table.seats.map((seat) => ({
         seat_id: seat.id, name: seat.name, kind: seat.kind, cards: seat.id === viewerSeatId ? seat.cards.map((card) => card.code) : [],
@@ -714,7 +727,7 @@ export class MultiplayerTableStore {
         cards: table.currentPlay?.cards.map((card) => card.code) ?? [], hand_type: table.currentPlay ? bigTwoHandLabel(table.currentPlay.kind) : null,
         played_by_seat_id: pileSeat?.id ?? null, played_by_name: pileSeat?.name ?? null,
       },
-      set_aside_cards: table.setAsideCards.map((card) => card.code), legal_actions: legalActions,
+      set_aside_cards: table.setAsideCards.map((card) => card.code), legal_actions: legalActions, legal_plays: legalPlays,
       recent_chat: table.chat.slice(-20).map((message) => ({ ...message })), last_event_id: table.nextEventId - 1,
     };
   }

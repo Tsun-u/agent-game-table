@@ -20,17 +20,22 @@ test("multiple MCP Agents play Big Two with isolated capabilities and event curs
 
   const tools = await first.listTools();
   assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [
-    "get_table_view", "join_table", "leave_table", "say_at_table", "take_action", "wait_for_table_event",
+    "get_game_rules", "get_table_view", "join_table", "leave_table", "say_at_table", "take_action", "wait_for_table_event",
   ]);
   const schemas = JSON.stringify(tools);
   assert.equal(schemas.includes('"deck"'), false);
   assert.equal(schemas.includes('"seed"'), false);
   assert.equal((await first.callTool({ name: "get_table_view", arguments: {} })).isError, true);
 
+  const rules = await first.callTool({ name: "get_game_rules", arguments: {} });
+  assert.equal((rules.structuredContent as { rules?: { rules_version?: string } }).rules?.rules_version, "bigtwo-tw-1");
+  assert.equal(JSON.stringify(rules).includes("A-2-3-4-5"), true);
+
   const created = store.createTable("阿童");
   const firstJoin = await first.callTool({ name: "join_table", arguments: { join_code: created.table.join_code, agent_name: "小葵" } });
   const secondJoin = await second.callTool({ name: "join_table", arguments: { join_code: created.table.join_code, agent_name: "阿宇" } });
   assert.equal(JSON.stringify(firstJoin).includes("agent_token"), false);
+  assert.equal((firstJoin.structuredContent as { rules?: { rules_version?: string } }).rules?.rules_version, "bigtwo-tw-1");
   const opened = store.startRound(created.human_token, tableFrom(secondJoin).version, "mcp-start-01");
   await first.callTool({ name: "wait_for_table_event", arguments: { timeout_seconds: 0 } });
   await second.callTool({ name: "wait_for_table_event", arguments: { timeout_seconds: 0 } });
@@ -40,6 +45,8 @@ test("multiple MCP Agents play Big Two with isolated capabilities and event curs
   const firstTurn = tableFrom(firstNotice);
   assert.equal(firstTurn.active_seat_id, firstTurn.viewer_seat_id);
   assert.deepEqual(firstTurn.legal_actions, ["play_cards", "pass"]);
+  assert.equal(firstTurn.legal_plays.length > 0, true);
+  assert.equal(firstTurn.legal_plays.every((play) => play.cards.length === 1), true);
   assert.equal(eventKinds(firstNotice).includes("cards_played"), true);
   for (const opponent of firstTurn.players.filter((seat) => !seat.is_you)) assert.deepEqual(opponent.cards, []);
 

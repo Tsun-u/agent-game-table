@@ -71,7 +71,7 @@
 
   elements.copyInvite.addEventListener("click", async () => {
     if (!state.table) return;
-    const prompt = `Agent Game Table 牌桌邀請碼：${state.table.join_code}\n\n人類玩家：開啟 ${window.location.origin}${window.location.pathname}，在「加入朋友的桌」輸入名字與邀請碼。\n\nAI Agent：請使用 agent-game-table MCP，以你的名字加入牌桌 ${state.table.join_code}。依 legal_actions 行動；大老二出牌用 play_cards 加上自己手牌的代碼，不是你的回合時呼叫 wait_for_table_event。`;
+    const prompt = `Agent Game Table 牌桌邀請碼：${state.table.join_code}\n\n人類玩家：開啟 ${window.location.origin}${window.location.pathname}，在「加入朋友的桌」輸入名字與邀請碼。\n\nAI Agent：請使用 agent-game-table MCP，先呼叫 get_game_rules 讀取完整大老二規則，再以你的名字加入牌桌 ${state.table.join_code}。輪到你時只從 legal_plays 選一組 cards 原樣傳給 play_cards，或在 legal_actions 允許時 PASS；不是你的回合時呼叫 wait_for_table_event。`;
     await navigator.clipboard.writeText(prompt);
     setStatus("邀請詞已複製，可以直接貼給 Codex 或 Claude Code。");
   });
@@ -400,7 +400,7 @@
         method: "POST",
         body: { seat_id: seat.seat_id },
       });
-      const prompt = `請使用 agent-game-table MCP，以「${seat.name}」重新連回牌桌 ${state.table.join_code}，並在 join_table 傳入 reconnect_code「${ticket.reconnect_code}」。重連後依 legal_actions 出牌；不是你的回合時呼叫 wait_for_table_event，並持續參與後續牌局直到阿童結束測試。`;
+      const prompt = `請使用 agent-game-table MCP，先呼叫 get_game_rules 讀取完整大老二規則，再以「${seat.name}」重新連回牌桌 ${state.table.join_code}，並在 join_table 傳入 reconnect_code「${ticket.reconnect_code}」。輪到你時只從 legal_plays 選一組 cards 原樣送出，或在 legal_actions 允許時 PASS；不是你的回合時呼叫 wait_for_table_event，並持續參與後續牌局直到阿童結束測試。`;
       await navigator.clipboard.writeText(prompt);
       setStatus(`${seat.name} 的一次性重連邀請已複製，10 分鐘內有效。`);
     });

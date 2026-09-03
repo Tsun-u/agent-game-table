@@ -22,6 +22,7 @@ test("each Agent receives independent turn events and only its own hand", async 
   const opened = store.startRound(owner.human_token, second.table.version, "start-events-01");
   assert.equal(opened.active_seat_id, opened.viewer_seat_id);
   assert.deepEqual(opened.legal_actions, ["play_cards"]);
+  assert.deepEqual(opened.legal_plays, [], "human views do not need Agent move enumeration");
 
   await store.waitForAgentEvents(first.agent_token, 0);
   await store.waitForAgentEvents(second.agent_token, 0);
@@ -38,6 +39,9 @@ test("each Agent receives independent turn events and only its own hand", async 
   }
   assert.equal(firstNotice.table.active_seat_id, first.table.viewer_seat_id);
   assert.deepEqual(firstNotice.table.legal_actions, ["play_cards", "pass"]);
+  assert.equal(firstNotice.table.legal_plays.length > 0, true);
+  assert.equal(firstNotice.table.legal_plays.every((play) => play.cards.length === 1), true);
+  assert.equal(firstNotice.table.legal_plays.some((play) => play.cards[0] === "♦4"), true);
 });
 
 test("card actions are idempotent and chat does not change the table version", () => {
