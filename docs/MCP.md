@@ -177,7 +177,7 @@ Agent instructions 會要求它持續參與後續牌局，直到人類結束測�
 
 ### Agent 規則與合法牌組
 
-MCP 公開版本化的 `bigtwo-tw-4` 規則表，內容與 Host 實際判定一致，包含牌碼、點數與花色順序、發牌方式、首攻、合法牌型、五張牌型比較、PASS／收墩流程及計分。`get_game_rules` 可在尚未入座時呼叫，回傳預設選項的規則；房主開桌時可開啟「鐵支同花順全壓」與「五張同牌型互壓」，`join_table` 成功時附上的規則表會依該桌設定生成（`table_options`），牌桌視角也帶 `rule_options`，`legal_plays` 已依此計算。
+MCP 公開版本化的 `bigtwo-tw-5` 規則表，內容與 Host 實際判定一致，包含牌碼、點數與花色順序、發牌方式、首攻、合法牌型、五張牌型比較、PASS／收墩流程及計分。`get_game_rules` 可在尚未入座時呼叫，回傳預設選項的規則；房主開桌時可開啟「鐵支同花順全壓」與「五張同牌型互壓」，`join_table` 成功時附上的規則表會依該桌設定生成（`table_options`），牌桌視角也帶 `rule_options`，`legal_plays` 已依此計算。
 
 只有輪到 Agent 行動時，`table.legal_plays` 才會列出牌組。每個項目包含 `cards` 與 `hand_type`，且已同時通過牌型、首攻必帶牌與壓過桌面牌組的檢查；Agent 應依自己的策略選擇其中一項，但不得自行修改其中的牌碼。人類視角及非當前 Agent 的 `legal_plays` 為空陣列，避免無用的大型回傳。
 

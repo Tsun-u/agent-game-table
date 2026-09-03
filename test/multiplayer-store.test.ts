@@ -195,6 +195,7 @@ test("a complete two-player round scores the winner and starts the next round wi
   assert.equal(winner.game_score > 0, true);
   const next = store.startRound(owner.human_token, view.version, "start-finish-02");
   assert.equal(next.active_seat_id, owner.table.viewer_seat_id);
+  assert.equal(next.legal_plays.every((play) => play.cards.includes("♣3")), true);
 });
 
 test("management closes one table without exposing cards or affecting another", async () => {

@@ -16,7 +16,7 @@
 - 卡牌互動、回合提示與同源 Lottie 結算動畫，支援 `prefers-reduced-motion`。
 - 介面字體用 justfont 的粉圓（Huninn，OFL），透過 jsDelivr 的 Fontsource 分段載入；Host 的 CSP 已放行 `cdn.jsdelivr.net` 的樣式與字體，離線時退回系統黑體。
 
-大老二規則採台灣民間常見玩法，寫成 TypeScript 規則模組並以 `get_game_rules` 公開（目前版本 `bigtwo-tw-4`）：
+大老二規則採台灣民間常見玩法，寫成 TypeScript 規則模組並以 `get_game_rules` 公開（目前版本 `bigtwo-tw-5`）：
 
 - 花色 ♣ 梅花 < ♦ 方塊 < ♥ 紅心 < ♠ 黑桃，點數 3 最小、2 最大；首局由持有 ♣3 的玩家先攻且第一手必須包含 ♣3；
 - 牌型只有單張、一對、順子、葫蘆、鐵支、同花順，沒有同花與三條；

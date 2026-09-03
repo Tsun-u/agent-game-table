@@ -221,7 +221,6 @@ interface Table {
   passedSeatIds: Set<string>;
   openingRequiredCard: string | null;
   setAsideCards: Card[];
-  previousWinnerSeatId: string | null;
   readonly seats: Seat[];
   readonly agentSessions: Map<string, AgentSession>;
   readonly events: TableEvent[];
@@ -281,7 +280,7 @@ export class MultiplayerTableStore {
     const table: Table = {
       id, joinCode, ownerSeatId: humanSeat.id, options: normalizeRuleOptions(options), nextSeatIndex: 0, phase: "lobby", version: 1, round: 0, deck: [], activeSeatId: null,
       currentPlay: null, currentPlaySeatId: null, passedSeatIds: new Set(), openingRequiredCard: null,
-      setAsideCards: [], previousWinnerSeatId: null, seats: [humanSeat], agentSessions: new Map(), events: [], chat: [],
+      setAsideCards: [], seats: [humanSeat], agentSessions: new Map(), events: [], chat: [],
       nextEventId: 1, receipts: new Map(), waiters: new Map(), reconnectTickets: new Map(),
     };
     this.#tables.set(id, table);
@@ -680,14 +679,11 @@ export class MultiplayerTableStore {
     for (const seat of seated) seat.cards.splice(0, seat.cards.length, ...sortBigTwoCards(seat.cards));
     if (seated.length === 3) table.setAsideCards = [this.#draw(table)];
     const openingCard = lowestBigTwoCard(seated.flatMap((seat) => seat.cards));
-    const previousWinner = table.round > 1 && table.previousWinnerSeatId
-      ? seated.find((seat) => seat.id === table.previousWinnerSeatId)
-      : null;
-    const leader = previousWinner ?? seated.find((seat) => seat.cards.some((card) => card.code === openingCard.code))!;
-    table.openingRequiredCard = table.round === 1 ? openingCard.code : null;
+    const leader = seated.find((seat) => seat.cards.some((card) => card.code === openingCard.code))!;
+    table.openingRequiredCard = openingCard.code;
     leader.status = "active";
     table.activeSeatId = leader.id;
-    this.#appendEvent(table, "turn_started", leader, `輪到 ${leader.name}；${table.openingRequiredCard ? `首手必須包含 ${table.openingRequiredCard}` : "由上局贏家先攻"}。`);
+    this.#appendEvent(table, "turn_started", leader, `輪到 ${leader.name}；首手必須包含 ${openingCard.code}。`);
   }
 
   #takeAction(table: Table, seat: Seat, action: TurnAction, cardCodes: readonly string[]): void {
@@ -746,7 +742,6 @@ export class MultiplayerTableStore {
 
   #settle(table: Table, winner: Seat): void {
     table.activeSeatId = null;
-    table.previousWinnerSeatId = winner.id;
     let winnings = 0;
     const seated = seatedMembers(table);
     for (const seat of seated) {
@@ -806,7 +801,6 @@ export class MultiplayerTableStore {
     for (const key of table.receipts.keys()) if (key.startsWith(`${seat.id}:`)) table.receipts.delete(key);
     table.seats.splice(seatIndex, 1);
     table.passedSeatIds.delete(seat.id);
-    if (table.previousWinnerSeatId === seat.id) table.previousWinnerSeatId = null;
     if (table.currentPlaySeatId === seat.id) {
       table.currentPlay = null;
       table.currentPlaySeatId = null;
@@ -1005,7 +999,7 @@ export class MultiplayerTableStore {
         round: table.round, deck: table.deck.map((card) => card.code), activeSeatId: table.activeSeatId,
         currentPlay: table.currentPlay ? { cards: table.currentPlay.cards.map((card) => card.code), kind: table.currentPlay.kind, score: table.currentPlay.score } : null,
         currentPlaySeatId: table.currentPlaySeatId, passedSeatIds: [...table.passedSeatIds], openingRequiredCard: table.openingRequiredCard,
-        setAsideCards: table.setAsideCards.map((card) => card.code), previousWinnerSeatId: table.previousWinnerSeatId,
+        setAsideCards: table.setAsideCards.map((card) => card.code),
         seats: table.seats.map((seat) => ({
           id: seat.id, kind: seat.kind, name: seat.name, cards: seat.cards.map((card) => card.code), seated: seat.seated, seatIndex: seat.seatIndex, status: seat.status,
           gameScore: seat.gameScore, roundsWon: seat.roundsWon, humanTokenHash: seat.humanTokenHash, principalId: seat.principalId,
@@ -1045,7 +1039,6 @@ export class MultiplayerTableStore {
         passedSeatIds: new Set(Array.isArray(saved.passedSeatIds) ? saved.passedSeatIds.map(String) : []),
         openingRequiredCard: typeof saved.openingRequiredCard === "string" ? saved.openingRequiredCard : null,
         setAsideCards: Array.isArray(saved.setAsideCards) ? saved.setAsideCards.map((card) => parseCard(String(card))) : [],
-        previousWinnerSeatId: typeof saved.previousWinnerSeatId === "string" ? saved.previousWinnerSeatId : null,
         seats, agentSessions: new Map((saved.agentSessions as AgentSession[]).map((session) => [session.tokenHash, { ...session }])),
         events: structuredClone((saved.events ?? []) as TableEvent[]), chat: structuredClone((saved.chat ?? []) as PublicChatMessage[]),
         nextEventId: Number(saved.nextEventId), receipts: new Map(structuredClone((saved.receipts ?? []) as [string, Receipt<unknown>][])),

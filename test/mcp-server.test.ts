@@ -28,14 +28,14 @@ test("multiple MCP Agents play Big Two with isolated capabilities and event curs
   assert.equal((await first.callTool({ name: "get_table_view", arguments: {} })).isError, true);
 
   const rules = await first.callTool({ name: "get_game_rules", arguments: {} });
-  assert.equal((rules.structuredContent as { rules?: { rules_version?: string } }).rules?.rules_version, "bigtwo-tw-4");
+  assert.equal((rules.structuredContent as { rules?: { rules_version?: string } }).rules?.rules_version, "bigtwo-tw-5");
   assert.equal(JSON.stringify(rules).includes("A-2-3-4-5"), true);
 
   const created = store.createTable("阿童");
   const firstJoin = await first.callTool({ name: "join_table", arguments: { join_code: created.table.join_code, agent_name: "小葵" } });
   const secondJoin = await second.callTool({ name: "join_table", arguments: { join_code: created.table.join_code, agent_name: "阿宇" } });
   assert.equal(JSON.stringify(firstJoin).includes("agent_token"), false);
-  assert.equal((firstJoin.structuredContent as { rules?: { rules_version?: string } }).rules?.rules_version, "bigtwo-tw-4");
+  assert.equal((firstJoin.structuredContent as { rules?: { rules_version?: string } }).rules?.rules_version, "bigtwo-tw-5");
   assert.equal(tableFrom(firstJoin).viewer_role, "spectator");
   store.humanTakeSeat(created.human_token, tableFrom(secondJoin).version, "owner-seat-mcp");
   await seatVia(first, "agent-a-seat-mcp");

@@ -1,6 +1,6 @@
 import { DEFAULT_BIG_TWO_RULE_OPTIONS, type BigTwoRuleOptions } from "./big-two.js";
 
-export const BIG_TWO_RULES_VERSION = "bigtwo-tw-4" as const;
+export const BIG_TWO_RULES_VERSION = "bigtwo-tw-5" as const;
 
 export interface BigTwoRuleOptionDescription {
   readonly key: keyof BigTwoRuleOptions;
@@ -47,8 +47,8 @@ export function buildBigTwoRules(options: BigTwoRuleOptions = DEFAULT_BIG_TWO_RU
     "兩人局每人 13 張，其餘 26 張不使用。",
   ]),
   opening: Object.freeze([
-    "第一局由持有本局已發出最低牌的玩家先攻，而且第一手必須包含該牌；三、四人局通常是 ♣3。",
-    "第二局起由上一局贏家先攻，可領出任一合法牌型。",
+    "每一局都由持有本局已發出最低牌的玩家先攻，而且第一手必須包含該牌；三、四人局通常是 ♣3。",
+    "局間可以換人入座，所以每局重新依最低牌決定先攻，與上一局勝負無關。",
   ]),
   legal_play_types: Object.freeze([
     Object.freeze({ card_count: 1, name: "單張", requirement: "任一張牌。" }),
