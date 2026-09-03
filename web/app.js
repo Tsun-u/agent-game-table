@@ -25,7 +25,7 @@
       "connectionBadge", "setupPanel", "createForm", "joinForm", "joinHumanName", "humanJoinCode", "humanName", "tablePanel", "joinCode", "copyInvite",
       "pileZone", "pileLabel", "pileCards", "roundLabel", "turnLabel", "playerSeats", "startRound", "playCards", "pass", "selectedCount",
       "seatCount", "roster", "chatLog", "chatForm", "chatInput", "statusLine", "passphraseLabel", "createPassphrase", "adminKeyLabel", "adminKey",
-      "managementPanel", "managementList", "managedTableCount", "managementHint", "refreshTables", "backToTables",
+      "managementPanel", "managementList", "managedTableCount", "managementHint", "refreshTables", "backToTables", "leaveTable",
       "tableStatus", "roundCelebration", "roundCelebrationAnimation", "roundCelebrationLabel", "optionBombs", "optionSameKind", "ruleOptions", "tableName", "railToggle", "rail", "handDock", "seatButton", "unseatButton", "dockNote", "spectatorList", "spectatorCount",
     ].map((id) => [id, document.getElementById(id)]),
   );
@@ -91,6 +91,18 @@
   });
 
   elements.refreshTables.addEventListener("click", () => void run(loadManagement));
+  elements.leaveTable.addEventListener("click", () => {
+    const table = state.table;
+    const midRound = table && table.phase === "player_turns" && table.viewer_role === "seated";
+    if (midRound && !window.confirm("這局還在打，離桌會讓你的牌作廢。確定要離桌嗎？")) return;
+    void run(async () => {
+      const result = await api("/api/human/leave", { method: "POST" });
+      forgetHumanToken(result.table_id);
+      showManagement();
+      setStatus(result.table_closed ? "你是最後一位人類，牌桌已關閉。" : "已離開牌桌。");
+      if (!state.remote || elements.adminKey.value) await loadManagement();
+    });
+  });
   elements.backToTables.addEventListener("click", () => {
     showManagement();
     if (state.remote && !elements.adminKey.value) return;

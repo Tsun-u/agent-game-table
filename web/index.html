@@ -92,6 +92,7 @@
           </div>
           <div class="table-bar-actions">
             <button id="copyInvite" class="ghost-button" type="button">複製邀請詞</button>
+            <button id="leaveTable" class="ghost-button" type="button">離桌</button>
             <button id="backToTables" class="ghost-button" type="button">所有牌桌</button>
             <button id="railToggle" class="ghost-button rail-toggle" type="button" aria-expanded="false" aria-controls="rail">玩家與聊天</button>
           </div>
@@ -125,13 +126,6 @@
               </div>
               <div id="roster" class="roster"></div>
             </section>
-            <section class="rail-section">
-              <div class="panel-heading">
-                <h2>觀戰區</h2>
-                <span id="spectatorCount" class="count-pill">0</span>
-              </div>
-              <div id="spectatorList" class="roster"></div>
-            </section>
             <section class="rail-section chat-section">
               <div class="panel-heading">
                 <h2>桌邊聊天</h2>
@@ -155,6 +149,14 @@
             <button id="playCards" class="primary-button play-button" type="button" disabled>出牌 <span id="selectedCount">0</span></button>
           </div>
         </div>
+
+        <section class="spectator-strip">
+          <div class="panel-heading">
+            <h2>觀戰區</h2>
+            <span id="spectatorCount" class="count-pill">0</span>
+          </div>
+          <div id="spectatorList" class="roster spectator-chips"></div>
+        </section>
       </section>
 
       <p id="statusLine" class="status-line" role="status"></p>

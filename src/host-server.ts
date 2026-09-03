@@ -158,6 +158,10 @@ async function routeRequest(
       sendJson(response, 200, store.createAgentReconnectTicket(token, requireString(body.seat_id, "seat_id")));
       return;
     }
+    if (method === "POST" && url.pathname === "/api/human/leave") {
+      sendJson(response, 200, store.leaveHuman(token));
+      return;
+    }
     if (method === "POST" && url.pathname === "/api/human/remove-agent") {
       sendJson(response, 200, {
         table: store.removeAgentSeat(

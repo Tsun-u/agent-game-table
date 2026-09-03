@@ -120,7 +120,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--blue); outline-
 .rail-toggle { display: none; }
 
 /* 牌桌：舞台與右欄 */
-.table-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; height: clamp(340px, calc(100vh - 400px), 600px); min-height: 0; }
+.table-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; height: clamp(520px, calc(100vh - 300px), 760px); min-height: 0; }
 .stage {
   position: relative; display: grid; grid-template-rows: auto 1fr auto; gap: 12px; min-height: 0; padding: 16px 18px; overflow: hidden;
   border: 1px solid var(--line); border-radius: 12px; background: var(--card);
@@ -197,24 +197,36 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--blue); outline-
 .play-button { min-width: 120px; }
 
 /* 右欄：記分與聊天 */
-.rail { display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 12px; min-height: 0; overflow: hidden; }
+.rail { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow: auto; }
+.chat-section { flex: 1 0 300px; }
 .rail-section { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; min-height: 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
-.roster { display: grid; }
+.rail-section:not(.chat-section) { grid-template-rows: auto auto; flex: 0 0 auto; }
+.roster { display: grid; max-height: 160px; overflow: auto; padding-right: 4px; }
 .roster-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto auto auto; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px dashed var(--line-strong); }
 .roster-row:last-child { border-bottom: 0; }
 .roster-row small { color: var(--muted); }
 .roster-row.spectator span:nth-child(2) { color: var(--muted); }
 .dock-note { margin: 0; color: var(--muted); }
+/* 觀戰區：手牌區下方一排名牌，人多就橫向捲 */
+.spectator-strip { display: grid; gap: 8px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.spectator-strip .panel-heading h2 { font-size: 0.95rem; }
+.spectator-chips { display: flex; gap: 8px; max-height: none; overflow-x: auto; overflow-y: hidden; padding: 2px 0 6px; scrollbar-width: thin; }
+.spectator-chips .roster-row { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid var(--line-strong); border-radius: 999px; }
+.spectator-chips .roster-row:empty { display: none; }
+.spectator-chips:empty::before { content: "還沒有人在觀戰"; color: var(--muted); font-size: 0.85rem; }
 .roster-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--red); }
 .roster-dot.agent { background: var(--blue); }
 .seat-reconnect, .seat-remove { border: 1px solid var(--line-strong); border-radius: 999px; padding: 3px 9px; background: transparent; color: var(--muted); font-size: 0.75rem; }
 .seat-reconnect:not(:disabled):hover { border-color: var(--blue); color: var(--blue); }
 .seat-remove:not(:disabled):hover { border-color: var(--red); color: var(--red); }
 .chat-section { grid-template-rows: auto minmax(0, 1fr) auto; }
-.chat-log { display: grid; align-content: end; gap: 8px; min-height: 120px; overflow: auto; padding-right: 4px; }
+.chat-log { display: flex; flex-direction: column; gap: 8px; min-height: 160px; overflow: auto; padding-right: 4px; }
+/* 訊息少時靠底；訊息多時這個彈性空間縮成 0，舊訊息往上捲得到 */
+.chat-log::before { content: ""; flex: 1 0 auto; }
 .chat-bubble { max-width: 92%; padding: 8px 12px; border-radius: 14px; background: var(--ground); line-height: 1.4; }
-.chat-bubble.agent { justify-self: start; background: var(--blue-soft); color: #1b3a95; }
-.chat-bubble.human { justify-self: end; background: var(--ink); color: #fff; }
+.chat-bubble { flex: 0 0 auto; }
+.chat-bubble.agent { align-self: flex-start; background: var(--blue-soft); color: #1b3a95; }
+.chat-bubble.human { align-self: flex-end; background: var(--ink); color: #fff; }
 .chat-bubble.spectator { background: transparent; border: 1px dashed var(--line-strong); color: var(--muted); }
 .chat-bubble.spectator strong::after { content: "觀戰"; margin-left: 6px; padding: 0 5px; border: 1px solid currentColor; border-radius: 4px; font-size: 0.66rem; }
 .chat-bubble strong { display: block; font-size: 0.72rem; font-weight: 400; opacity: 0.75; }
@@ -307,8 +319,9 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
     visibility: hidden; transform: translateX(100%); transition: transform 0.22s ease-out, visibility 0s linear 0.22s;
   }
   .rail.open { visibility: visible; transform: translateX(0); transition: transform 0.22s ease-out; }
-  .rail-section { overflow: visible; }
-  .chat-log { height: min(320px, 40vh); }
+  .rail-section { flex: 0 0 auto; overflow: hidden; }
+  .roster { max-height: 32vh; }
+  .chat-log { height: min(360px, 45vh); }
   .table-bar { flex-wrap: wrap; }
   .table-bar-actions { margin-left: auto; }
   .setup-panel { grid-template-columns: 1fr; }

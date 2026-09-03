@@ -41,6 +41,26 @@ test("everyone enters as a spectator, at most 4 sit, and seats only change betwe
   assert.equal(late.table.players.every((seat) => seat.cards.length === 0), true, "spectators never see a hand");
 });
 
+test("a human can leave the table; the owner hands over to the next human or closes an empty table", () => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  const owner = store.createTable("阿童");
+  const friend = store.joinHuman(owner.table.join_code, "小蝶");
+  const agent = store.joinAgent(owner.table.join_code, "小光");
+
+  const handedOver = store.leaveHuman(owner.human_token);
+  assert.equal(handedOver.table_closed, false);
+  assert.throws(() => store.getHumanView(owner.human_token), /憑證無效/);
+  const friendView = store.getHumanView(friend.human_token);
+  assert.equal(friendView.viewer_is_owner, true);
+  assert.equal(friendView.owner_name, "小蝶");
+  assert.equal(friendView.spectators.some((member) => member.name === "阿童"), false);
+  assert.equal(store.getAgentView(agent.agent_token).owner_name, "小蝶");
+
+  const closed = store.leaveHuman(friend.human_token);
+  assert.equal(closed.table_closed, true);
+  assert.throws(() => store.getAgentView(agent.agent_token), /憑證無效|不存在/);
+});
+
 test("each Agent receives independent turn events and only its own hand", async () => {
   const store = new MultiplayerTableStore(() => createDeck());
   const owner = store.createTable("阿童");

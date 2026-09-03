@@ -120,6 +120,14 @@ export interface AgentReconnectTicket {
   readonly agent_name: string;
 }
 
+export interface HumanLeaveResult {
+  readonly left: true;
+  readonly table_id: string;
+  readonly join_code: string;
+  /** 房主是最後一位人類時，離桌等於關桌。 */
+  readonly table_closed: boolean;
+}
+
 export interface AgentLeaveResult {
   readonly left: true;
   readonly table_id: string;
@@ -200,7 +208,7 @@ interface ReconnectTicket {
 interface Table {
   readonly id: string;
   readonly joinCode: string;
-  readonly ownerSeatId: string;
+  ownerSeatId: string;
   readonly options: BigTwoRuleOptions;
   nextSeatIndex: number;
   phase: TablePhase;
@@ -485,6 +493,24 @@ export class MultiplayerTableStore {
     return result;
   }
 
+  /** 人類離桌：房主離開時把房主交給最早進桌的另一位人類，沒有其他人類就關桌。 */
+  leaveHuman(humanToken: string): HumanLeaveResult {
+    const { table, seat } = this.#tableForHuman(humanToken);
+    const result: HumanLeaveResult = { left: true, table_id: table.id, join_code: table.joinCode, table_closed: false };
+    if (seat.id === table.ownerSeatId) {
+      const successor = table.seats.find((candidate) => candidate.kind === "human" && candidate.id !== seat.id);
+      if (!successor) {
+        this.closeTable(table.id);
+        return { ...result, table_closed: true };
+      }
+      table.ownerSeatId = successor.id;
+      this.#appendEvent(table, "message", successor, `${seat.name} 離桌，房主交給 ${successor.name}。`);
+    }
+    this.#removeSeat(table, seat, `${seat.name} 離開了牌桌。`, null);
+    this.#persist();
+    return result;
+  }
+
   removeAgentSeat(humanToken: string, seatId: string, expectedVersion: number, idempotencyKey: string): PublicTableView {
     const { table, seat: humanSeat } = this.#tableForHuman(humanToken);
     if (humanSeat.id !== table.ownerSeatId) throw new Error("只有開桌的人可以移除 Agent 座位。");
@@ -753,6 +779,11 @@ export class MultiplayerTableStore {
 
   #removeAgentSeat(table: Table, seat: Seat, text: string, leaveResult: AgentLeaveResult): void {
     if (seat.kind !== "agent") throw new Error("只能移除 Agent 玩家。");
+    this.#removeSeat(table, seat, text, leaveResult);
+  }
+
+  /** 把任一成員移出牌桌：撤銷憑證、清座位相關狀態，正在進行的局視情況結束或輪到下一位。 */
+  #removeSeat(table: Table, seat: Seat, text: string, leaveResult: AgentLeaveResult | null): void {
     const seatIndex = table.seats.indexOf(seat);
     if (seatIndex < 0) throw new Error("找不到這個座位。");
     const seatedIndex = seatedMembers(table).indexOf(seat);
@@ -767,8 +798,9 @@ export class MultiplayerTableStore {
       }
       table.agentSessions.delete(tokenHash);
       this.#agentTokens.delete(tokenHash);
-      this.#rememberDepartedToken(tokenHash, leaveResult);
+      if (leaveResult) this.#rememberDepartedToken(tokenHash, leaveResult);
     }
+    if (seat.humanTokenHash) this.#humanTokens.delete(seat.humanTokenHash);
     for (const [code, ticket] of table.reconnectTickets) if (ticket.seatId === seat.id) table.reconnectTickets.delete(code);
     if (seat.principalId) this.#principalSeats.delete(principalBindingKey(seat.principalId, seat.name));
     for (const key of table.receipts.keys()) if (key.startsWith(`${seat.id}:`)) table.receipts.delete(key);
