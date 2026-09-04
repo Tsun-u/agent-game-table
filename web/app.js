@@ -243,7 +243,11 @@
 
   elements.copyInvite.addEventListener("click", async () => {
     if (!state.table) return;
-    const prompt = `Agent Game Table 牌桌邀請碼：${state.table.join_code}\n\n人類玩家：開啟 ${window.location.origin}${window.location.pathname}，在「加入朋友的桌」輸入名字與邀請碼，進桌後按「入座」。\n\nAI Agent：請使用 agent-game-table MCP，先呼叫 get_game_rules 讀取完整大老二規則，再以你的名字 join_table 加入牌桌 ${state.table.join_code}，接著呼叫 take_seat 入座。輪到你時只從 legal_plays 選一組 cards 原樣傳給 play_cards，或在 legal_actions 允許時 PASS；不是你的回合時呼叫 wait_for_table_event。局間若人類請你讓位，用 leave_seat 到觀戰區繼續看牌聊天。`;
+    const prompt = `Agent Game Table 牌桌邀請碼：${state.table.join_code}
+
+人類玩家：開啟 ${window.location.origin}${window.location.pathname}，在「加入朋友的桌」輸入名字與邀請碼，進桌後按「入座」。
+
+AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌桌 ${state.table.join_code}（回應會附上這桌的完整${state.table.rule_label}規則），接著呼叫 take_seat 入座。${agentTurnInstructions(state.table.mode)}局間若人類請你讓位，用 leave_seat 到觀戰區繼續看牌聊天。`;
     await navigator.clipboard.writeText(prompt);
     setStatus("邀請詞已複製，可以直接貼給 Codex 或 Claude Code。");
   });
@@ -403,7 +407,18 @@
     }), 800);
   }
 
-  const DEFAULT_RULE_TEXT = { bigtwo: "台灣標準（五張只能被五張壓、葫蘆可壓順子）" };
+  const DEFAULT_RULE_TEXT = {
+    bigtwo: "台灣標準（五張只能被五張壓、葫蘆可壓順子）",
+    gongzhu: "台灣標準（紅心照牌面、♥4 -10、變壓器獨得 +50）",
+    hearts: "台灣標準（每張紅心 -1、♠Q -13、射月）",
+  };
+
+  /** 邀請詞裡給 AI 的出牌指示，動作名依遊戲不同：大老二是 play_cards 可 PASS，吃墩遊戲是 play_card，傷心小棧多一段傳牌。 */
+  function agentTurnInstructions(mode) {
+    if (mode === "hearts") return "傳牌階段從 legal_plays 挑三張一起送 pass_cards；輪到你出牌時只從 legal_plays 選一張原樣傳給 play_card；不是你的回合時呼叫 wait_for_table_event。";
+    if (mode === "gongzhu") return "輪到你時只從 legal_plays 選一張原樣傳給 play_card；不是你的回合時呼叫 wait_for_table_event。";
+    return "輪到你時只從 legal_plays 選一組 cards 原樣傳給 play_cards，或在 legal_actions 允許時 PASS；不是你的回合時呼叫 wait_for_table_event。";
+  }
 
   function describeRuleOptions(table) {
     const game = state.games[table.mode];
@@ -842,7 +857,7 @@
         method: "POST",
         body: { seat_id: seat.seat_id },
       });
-      const prompt = `請使用 agent-game-table MCP，先呼叫 get_game_rules 讀取完整大老二規則，再以「${seat.name}」重新連回牌桌 ${state.table.join_code}，並在 join_table 傳入 reconnect_code「${ticket.reconnect_code}」。輪到你時只從 legal_plays 選一組 cards 原樣送出，或在 legal_actions 允許時 PASS；不是你的回合時呼叫 wait_for_table_event，並持續參與後續牌局直到阿童結束測試。`;
+      const prompt = `請使用 agent-game-table MCP，以「${seat.name}」重新連回牌桌 ${state.table.join_code}，並在 join_table 傳入 reconnect_code「${ticket.reconnect_code}」（回應會附上這桌的完整${state.table.rule_label}規則）。${agentTurnInstructions(state.table.mode)}請持續參與後續牌局直到人類結束。`;
       await navigator.clipboard.writeText(prompt);
       setStatus(`${seat.name} 的一次性重連邀請已複製，10 分鐘內有效。`);
     });
