@@ -91,7 +91,15 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--blue); outline-
 
 /* 營運台 */
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.management-panel { margin-top: 18px; border: 1px solid var(--line); border-radius: 16px; padding: 20px; background: var(--card); }
+.lobby-panel, .management-panel { margin-top: 18px; border: 1px solid var(--line); border-radius: 16px; padding: 20px; background: var(--card); }
+.lobby-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
+.lobby-card { display: grid; gap: 10px; border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+.lobby-card .management-card-heading strong { font-size: 1.05rem; letter-spacing: 0; }
+.lobby-code { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 1.2rem; letter-spacing: 0.18em; font-variant-numeric: tabular-nums; }
+.lobby-joined { padding: 2px 9px; border-radius: 999px; font-size: 0.75rem; letter-spacing: 0; color: #fff; background: var(--ink); }
+.lobby-actions { display: grid; gap: 8px; }
+.lobby-join-form { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; }
+.lobby-join-form input { min-width: 0; }
 .management-hint { margin: 8px 0 14px; color: var(--muted); }
 .management-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
 .management-card { display: grid; gap: 12px; border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
@@ -334,8 +342,8 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
   .table-bar { flex-wrap: wrap; gap: 8px 12px; padding: 10px 12px; }
   .table-title { flex: 1 1 100%; }
   .invite { margin-left: 0; }
-  .table-bar-actions { margin-left: auto; }
-  .table-bar-actions .ghost-button:not(.rail-toggle) { display: none; }
+  .table-bar-actions { margin-left: 0; flex: 1 1 100%; flex-wrap: wrap; justify-content: flex-end; }
+  .table-bar-actions .ghost-button { padding: 7px 10px; font-size: 0.82rem; }
   .stage { min-height: 360px; padding: 12px; }
   .playing-card { width: 64px; height: 90px; }
   .pile-cards .playing-card + .playing-card { margin-left: -22px; }
@@ -343,6 +351,7 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
   .hand-dock .cards.compact .playing-card { flex-basis: 56px; width: 56px; height: 80px; margin-left: -20px; }
   .action-row .primary-button, .action-row .pass-button { flex: 1; }
   .management-actions { flex-direction: column; align-items: stretch; }
+  .lobby-join-form { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

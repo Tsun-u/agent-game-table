@@ -17,7 +17,7 @@ Remote Streamable HTTP MCP ─┘       ├─ 本機：記憶體
 - `agent-game-table-host` 是唯一牌局權威，持有牌堆與所有座位狀態。
 - 本機模式由每個 MCP client 啟動自己的 `agent-game-table-mcp` STDIO process；該 process 只在記憶體持有自己座位的 capability token。
 - Remote 模式逐次驗證 Bearer／OAuth token，並把驗證後的 caller principal 綁定座位；不同 principal 不能接管彼此的 MCP session 或座位。
-- 人類在 UI 建立牌桌並取得邀請碼。同一組邀請碼給人也給 Agent：進桌都先在觀戰區，自己選擇入座；開局後座位凍結，每局結束後入座者可以起身、觀戰者可以入座，讓大家輪流打。開桌者是房主，管開局、重連碼、移除與關桌，自己坐不坐都可以。受管理密碼保護的營運台可以管理多桌；Agent 仍只能用邀請碼進桌，無法列舉其他牌桌。
+- 人類在 UI 建立牌桌並取得邀請碼。同一組邀請碼給人也給 Agent：進桌都先在觀戰區，自己選擇入座；開局後座位凍結，每局結束後入座者可以起身、觀戰者可以入座，讓大家輪流打。開桌者是房主，管開局、重連碼、移除與關桌，自己坐不坐都可以。首頁的牌桌大廳公開列出每桌的開桌者、人數與狀態，邀請碼只露首尾兩碼，進桌仍要輸入完整邀請碼（同一來源連續猜錯會冷卻）；受管理密碼保護的營運台才看得到完整邀請碼並能關桌。Agent 只能用邀請碼進桌，無法列舉其他牌桌。
 - 開桌者負責開局；首局由持有最低牌的玩家先攻，之後依出牌與 PASS 狀態輪替。
 - 本機 Host 的牌桌只存在記憶體；Remote Host 使用 AES-256-GCM 加密快照，Host 重啟後可恢復牌桌、回合、事件游標與憑證雜湊。
 
@@ -90,7 +90,7 @@ Remote 模式由 `npm run start:remote` 啟動同一套人類 UI、Host API 與 
 
 Remote 的 `GET /api/admin/tables` 與 `DELETE /api/admin/tables/:tableId` 必須帶 `X-Agent-Game-Table-Human-Key`。列表只回傳桌號、階段、回合、玩家名稱與座位數，不含手牌、聊天、牌堆或任何 token。關桌會撤銷人類 token、所有 Agent capability、重連碼與 Remote principal 綁定，並釋放正在等待的 long poll。管理密碼只保留在頁面密碼欄，不寫入瀏覽器持久儲存。
 
-同桌可有多位真人及多個 MCP Agent；每位真人都取得自己的 capability，只能查看及操作自己的座位。營運台不是觀戰視角，也沒有提供公開桌單，沒有該桌人類 capability 的瀏覽器只能管理或關桌，不能查看牌面或代替玩家操作。
+同桌可有多位真人及多個 MCP Agent；每位真人都取得自己的 capability，只能查看及操作自己的座位。營運台不是觀戰視角；公開的牌桌大廳只列開桌者、人數與遮罩後的邀請碼，沒有該桌人類 capability 的瀏覽器只能管理或關桌，不能查看牌面或代替玩家操作。
 
 ### 內建 OAuth 登入：email 白名單＋通關密語
 

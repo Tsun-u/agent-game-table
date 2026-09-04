@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { dirname } from "node:path";
 
+import { clientAddress } from "./client-address.js";
 import type { RemoteAuthenticator, RemotePrincipal } from "./remote-auth.js";
 
 /**
@@ -465,14 +466,6 @@ function withParams(base: string, params: Record<string, string | null>): string
   const url = new URL(base);
   for (const [key, value] of Object.entries(params)) if (value !== null && value !== undefined) url.searchParams.set(key, value);
   return url.toString();
-}
-
-function clientAddress(request: IncomingMessage): string {
-  const cloudflare = request.headers["cf-connecting-ip"];
-  if (typeof cloudflare === "string" && cloudflare.trim()) return cloudflare.trim();
-  const forwarded = request.headers["x-forwarded-for"];
-  if (typeof forwarded === "string" && forwarded.trim()) return forwarded.split(",")[0]!.trim();
-  return request.socket.remoteAddress ?? "unknown";
 }
 
 async function readBody(request: IncomingMessage): Promise<string> {

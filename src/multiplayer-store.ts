@@ -159,6 +159,21 @@ export interface ManagedTableSummary {
   readonly updated_at: string;
 }
 
+/** 大廳公開資訊：誰開的桌、幾個人、打到哪；邀請碼只露首尾兩碼。 */
+export interface LobbyTableSummary {
+  readonly table_id: string;
+  readonly join_code_hint: string;
+  readonly rule_label: "大老二";
+  readonly phase: TablePhase;
+  readonly round: number;
+  readonly player_count: number;
+  readonly spectator_count: number;
+  readonly max_seats: 4;
+  readonly human_name: string;
+  readonly active_player_name: string | null;
+  readonly updated_at: string;
+}
+
 export interface CloseTableResult {
   readonly closed: true;
   readonly table: ManagedTableSummary;
@@ -316,6 +331,12 @@ export class MultiplayerTableStore {
 
   listTables(): ManagedTableSummary[] {
     return [...this.#tables.values()].map((table) => this.#managedSummary(table)).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  }
+
+  listLobby(): LobbyTableSummary[] {
+    return this.listTables().map(({ join_code, mode: _mode, version: _version, players: _players, created_at: _createdAt, ...summary }) => ({
+      ...summary, join_code_hint: joinCodeHint(join_code),
+    }));
   }
 
   closeTable(tableId: string): CloseTableResult {
@@ -1091,6 +1112,11 @@ function capabilityToken(): string {
 
 function capabilityHash(token: string): string {
   return createHash("sha256").update(token).digest("hex");
+}
+
+function joinCodeHint(joinCode: string): string {
+  if (joinCode.length < 3) return "•".repeat(joinCode.length);
+  return `${joinCode[0]}${"•".repeat(joinCode.length - 2)}${joinCode.at(-1)}`;
 }
 
 function principalBindingKey(principalId: string, seatName: string): string {

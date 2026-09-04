@@ -134,7 +134,7 @@ test("one browser profile can create and operate multiple tables in separate tab
   await lobby.getByRole("button", { name: "建立共桌牌局" }).click();
   await lobby.locator("#tablePanel").waitFor({ state: "visible" });
   const firstCode = (await lobby.locator("#joinCode").innerText()).trim();
-  await lobby.getByRole("button", { name: "所有牌桌" }).click();
+  await lobby.getByRole("button", { name: "回大廳" }).click();
   await lobby.locator("#managementPanel").waitFor({ state: "visible" });
 
   await lobby.getByLabel("你的名字").fill("B 桌人類");
@@ -142,8 +142,11 @@ test("one browser profile can create and operate multiple tables in separate tab
   await lobby.locator("#tablePanel").waitFor({ state: "visible" });
   const secondCode = (await lobby.locator("#joinCode").innerText()).trim();
   assert.notEqual(secondCode, firstCode);
-  await lobby.getByRole("button", { name: "所有牌桌" }).click();
+  await lobby.getByRole("button", { name: "回大廳" }).click();
   await lobby.locator(".management-card").first().waitFor();
+  await lobby.locator(".lobby-card").first().waitFor();
+  assert.equal(await lobby.locator(".lobby-card").count(), 2, "the lobby lists every table without an admin key");
+  assert.equal(await lobby.locator(".lobby-joined").count(), 2, "both tables were created in this browser");
   assert.equal(await lobby.locator(".management-card").count(), 2);
   assert.equal(await lobby.evaluate(() => Object.keys(JSON.parse(localStorage.getItem("agent_game_table_human_tokens_v1") || "{}")).length), 2);
 

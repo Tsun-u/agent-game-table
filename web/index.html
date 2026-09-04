@@ -67,6 +67,15 @@
         </form>
       </section>
 
+      <section id="lobbyPanel" class="lobby-panel">
+        <div class="management-heading">
+          <h2>牌桌大廳</h2>
+          <span id="lobbyCount" class="count-pill">0 桌</span>
+        </div>
+        <p id="lobbyHint" class="management-hint">目前沒有牌桌，開一桌吧。</p>
+        <div id="lobbyList" class="lobby-list"></div>
+      </section>
+
       <section id="managementPanel" class="management-panel">
         <div class="panel-heading">
           <h2>多桌營運台</h2>
@@ -93,7 +102,7 @@
           <div class="table-bar-actions">
             <button id="copyInvite" class="ghost-button" type="button">複製邀請詞</button>
             <button id="leaveTable" class="ghost-button" type="button">離桌</button>
-            <button id="backToTables" class="ghost-button" type="button">所有牌桌</button>
+            <button id="backToTables" class="ghost-button" type="button">回大廳</button>
             <button id="railToggle" class="ghost-button rail-toggle" type="button" aria-expanded="false" aria-controls="rail">玩家與聊天</button>
           </div>
         </div>

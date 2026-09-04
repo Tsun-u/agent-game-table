@@ -13,6 +13,7 @@
     token: (initialTableId && tokens[initialTableId]) || "",
     table: null,
     polling: null,
+    lobbyPolling: null,
     busy: false,
     remote: false,
     selectedCards: new Set(),
@@ -26,6 +27,7 @@
       "pileZone", "pileLabel", "pileCards", "roundLabel", "turnLabel", "playerSeats", "startRound", "playCards", "pass", "selectedCount",
       "seatCount", "roster", "chatLog", "chatForm", "chatInput", "statusLine", "passphraseLabel", "createPassphrase", "adminKeyLabel", "adminKey",
       "managementPanel", "managementList", "managedTableCount", "managementHint", "refreshTables", "backToTables", "leaveTable",
+      "lobbyPanel", "lobbyList", "lobbyCount", "lobbyHint",
       "tableStatus", "roundCelebration", "roundCelebrationAnimation", "roundCelebrationLabel", "optionBombs", "optionSameKind", "ruleOptions", "tableName", "railToggle", "rail", "handDock", "seatButton", "unseatButton", "dockNote", "spectatorList", "spectatorCount",
     ].map((id) => [id, document.getElementById(id)]),
   );
@@ -76,19 +78,27 @@
 
   elements.joinForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    await run(async () => {
-      const result = await api("/api/human/join", {
-        method: "POST",
-        body: { join_code: elements.humanJoinCode.value.trim(), human_name: elements.joinHumanName.value.trim() },
-        authenticated: false,
-      });
-      rememberHumanToken(result.table.table_id, result.human_token);
-      selectTable(result.table.table_id, result.human_token);
-      setTable(result.table);
-      setStatus(`已加入 ${result.table.join_code}，等開桌者開始牌局。`);
-      startPolling();
-    });
+    await run(() => joinWithCode(elements.humanJoinCode.value, elements.joinHumanName.value));
   });
+
+  async function joinWithCode(joinCode, humanName) {
+    const result = await api("/api/human/join", {
+      method: "POST",
+      body: { join_code: joinCode.trim(), human_name: humanName.trim() },
+      authenticated: false,
+    });
+    rememberHumanToken(result.table.table_id, result.human_token);
+    selectTable(result.table.table_id, result.human_token);
+    setTable(result.table);
+    setStatus(`已加入 ${result.table.join_code}，等開桌者開始牌局。`);
+    startPolling();
+  }
+
+  async function enterKnownTable(tableId) {
+    selectTable(tableId, state.tokens[tableId]);
+    await refresh(true);
+    startPolling();
+  }
 
   elements.refreshTables.addEventListener("click", () => void run(loadManagement));
   elements.leaveTable.addEventListener("click", () => {
@@ -105,9 +115,113 @@
   });
   elements.backToTables.addEventListener("click", () => {
     showManagement();
+    elements.lobbyPanel.scrollIntoView({ block: "start", behavior: reducedMotion.matches ? "auto" : "smooth" });
     if (state.remote && !elements.adminKey.value) return;
     void loadManagement().catch((error) => setStatus(error.message, true));
   });
+
+  let lobbySignature = "";
+
+  async function loadLobby() {
+    const result = await api("/api/lobby", { method: "GET", authenticated: false });
+    // 有人正在卡片裡填邀請碼時不重畫，免得把打到一半的字清掉；內容沒變也不重畫。
+    const editing = elements.lobbyList.contains(document.activeElement) || elements.lobbyList.querySelector(".lobby-join-form:not([hidden])");
+    const signature = JSON.stringify([result.tables, Object.keys(state.tokens).sort()]);
+    if (editing || signature === lobbySignature) return;
+    lobbySignature = signature;
+    renderLobby(result.tables);
+  }
+
+  function renderLobby(tables) {
+    elements.lobbyCount.textContent = `${tables.length} 桌`;
+    elements.lobbyHint.textContent = tables.length
+      ? "已加入的桌直接進；其他桌向開桌者要邀請碼，點卡片輸入。"
+      : "目前沒有牌桌，開一桌吧。";
+    elements.lobbyList.replaceChildren(...tables.map((table) => {
+      const article = document.createElement("article");
+      article.className = "lobby-card";
+      const joined = Boolean(state.tokens[table.table_id]);
+
+      const heading = document.createElement("div");
+      heading.className = "management-card-heading";
+      const title = document.createElement("div");
+      const owner = document.createElement("strong");
+      owner.textContent = `${table.human_name} 的桌`;
+      const status = document.createElement("span");
+      status.textContent = `${table.rule_label} · ${phaseLabel(table)}`;
+      title.append(owner, status);
+      const count = document.createElement("span");
+      count.className = "count-pill";
+      count.textContent = `${table.player_count}/${table.max_seats} 入座 · ${table.spectator_count} 觀戰`;
+      heading.append(title, count);
+
+      const code = document.createElement("p");
+      code.className = "lobby-code";
+      code.textContent = table.join_code_hint;
+      if (joined) {
+        const badge = document.createElement("span");
+        badge.className = "lobby-joined";
+        badge.textContent = "已加入";
+        code.append(badge);
+      }
+
+      const actions = document.createElement("div");
+      actions.className = "lobby-actions";
+      if (joined) {
+        const enter = document.createElement("button");
+        enter.type = "button";
+        enter.className = "secondary-button";
+        enter.textContent = "進桌";
+        enter.addEventListener("click", () => void run(() => enterKnownTable(table.table_id)));
+        actions.append(enter);
+      } else {
+        const form = document.createElement("form");
+        form.className = "lobby-join-form";
+        form.hidden = true;
+        const name = document.createElement("input");
+        name.maxLength = 80;
+        name.placeholder = "你的暱稱";
+        name.required = true;
+        name.value = elements.joinHumanName.value;
+        name.setAttribute("aria-label", "你的暱稱");
+        const input = document.createElement("input");
+        input.maxLength = 20;
+        input.placeholder = "完整邀請碼";
+        input.required = true;
+        input.autocomplete = "off";
+        input.setAttribute("aria-label", "完整邀請碼");
+        const submit = document.createElement("button");
+        submit.type = "submit";
+        submit.className = "secondary-button";
+        submit.textContent = "進桌";
+        form.append(name, input, submit);
+        form.addEventListener("submit", (event) => {
+          event.preventDefault();
+          void run(() => joinWithCode(input.value, name.value));
+        });
+        const reveal = document.createElement("button");
+        reveal.type = "button";
+        reveal.className = "ghost-button";
+        reveal.textContent = "輸入邀請碼進桌";
+        reveal.addEventListener("click", () => {
+          form.hidden = false;
+          reveal.hidden = true;
+          (name.value ? input : name).focus();
+        });
+        actions.append(reveal, form);
+      }
+
+      article.append(heading, code, actions);
+      return article;
+    }));
+  }
+
+  function startLobbyPolling() {
+    lobbySignature = "";
+    clearInterval(state.lobbyPolling);
+    state.lobbyPolling = setInterval(() => void loadLobby().catch(() => undefined), 10_000);
+    void loadLobby().catch((error) => setStatus(error.message, true));
+  }
 
   elements.copyInvite.addEventListener("click", async () => {
     if (!state.table) return;
@@ -283,6 +397,7 @@
     for (const code of state.selectedCards) if (!ownedCards.has(code)) state.selectedCards.delete(code);
     elements.setupPanel.hidden = true;
     elements.managementPanel.hidden = true;
+    elements.lobbyPanel.hidden = true;
     elements.tablePanel.hidden = false;
     elements.connectionBadge.textContent = state.remote ? "Remote 共桌已連線" : "本機共桌已連線";
     elements.connectionBadge.classList.add("online");
@@ -343,13 +458,17 @@
     url.searchParams.delete("table");
     window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
     elements.setupPanel.hidden = false;
+    elements.lobbyPanel.hidden = false;
     elements.managementPanel.hidden = false;
     elements.tablePanel.hidden = true;
-    elements.connectionBadge.textContent = "多桌營運台";
+    elements.connectionBadge.textContent = "牌桌大廳";
     elements.connectionBadge.classList.remove("online");
+    startLobbyPolling();
   }
 
   function selectTable(tableId, token) {
+    clearInterval(state.lobbyPolling);
+    state.lobbyPolling = null;
     state.tableId = tableId;
     state.token = token;
     const url = new URL(window.location.href);

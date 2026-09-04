@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import { extname } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { clientAddress } from "./client-address.js";
 import { MultiplayerTableStore, normalizeRuleOptions, type TurnAction } from "./multiplayer-store.js";
 
 export interface AgentGameTableHostOptions {
@@ -27,19 +28,44 @@ export interface RunningAgentGameTableHost {
 
 const DEFAULT_WEB_ROOT = fileURLToPath(new URL("../../web/", import.meta.url));
 const BODY_LIMIT = 64 * 1024;
+const JOIN_THROTTLE_WINDOW_MS = 10 * 60 * 1000;
+const JOIN_THROTTLE_MAX_FAILURES = 5;
+
+/** 大廳露出邀請碼首尾後，剩下的字元可以猜；同一來源連續猜錯就冷卻。 */
+class JoinCodeThrottle {
+  readonly #failures = new Map<string, { count: number; resetAt: number }>();
+
+  assertAllowed(source: string): void {
+    const record = this.#failures.get(source);
+    if (record && record.resetAt > Date.now() && record.count >= JOIN_THROTTLE_MAX_FAILURES) {
+      throw new Error("邀請碼猜錯太多次，請 10 分鐘後再試。");
+    }
+  }
+
+  recordFailure(source: string): void {
+    const now = Date.now();
+    const record = this.#failures.get(source);
+    if (!record || record.resetAt <= now) this.#failures.set(source, { count: 1, resetAt: now + JOIN_THROTTLE_WINDOW_MS });
+    else record.count += 1;
+    if (this.#failures.size > 10_000) {
+      for (const [key, value] of this.#failures) if (value.resetAt <= now) this.#failures.delete(key);
+    }
+  }
+}
 
 export async function startAgentGameTableHost(options: AgentGameTableHostOptions = {}): Promise<RunningAgentGameTableHost> {
   const hostname = options.hostname ?? "127.0.0.1";
   const store = options.store ?? new MultiplayerTableStore();
   const webRoot = options.webRoot ?? DEFAULT_WEB_ROOT;
+  const joinThrottle = new JoinCodeThrottle();
   const server = createServer((request, response) => {
-    void routeRequest(store, webRoot, options.extension, request, response).catch((error: unknown) => {
+    void routeRequest(store, webRoot, options.extension, joinThrottle, request, response).catch((error: unknown) => {
       if (response.headersSent) {
         response.destroy();
         return;
       }
       const message = error instanceof Error ? error.message : "牌桌主機發生未知錯誤。";
-      const status = message.includes("憑證") ? 401 : message.includes("找不到") ? 404 : 400;
+      const status = message.includes("再試") ? 429 : message.includes("憑證") ? 401 : message.includes("找不到") ? 404 : 400;
       sendJson(response, status, { error: message });
     });
   });
@@ -67,6 +93,7 @@ async function routeRequest(
   store: MultiplayerTableStore,
   webRoot: string,
   extension: AgentGameTableHostExtension | undefined,
+  joinThrottle: JoinCodeThrottle,
   request: IncomingMessage,
   response: ServerResponse,
 ): Promise<void> {
@@ -85,12 +112,22 @@ async function routeRequest(
     sendJson(response, 201, store.createTable(humanName, normalizeRuleOptions(body.options)));
     return;
   }
+  if (method === "GET" && url.pathname === "/api/lobby") {
+    sendJson(response, 200, { tables: store.listLobby() });
+    return;
+  }
   if (method === "POST" && url.pathname === "/api/human/join") {
+    const source = clientAddress(request);
+    joinThrottle.assertAllowed(source);
     const body = await readJsonBody(request);
-    sendJson(response, 200, store.joinHuman(
-      requireString(body.join_code, "join_code"),
-      requireString(body.human_name, "human_name"),
-    ));
+    const joinCode = requireString(body.join_code, "join_code");
+    const humanName = requireString(body.human_name, "human_name");
+    try {
+      sendJson(response, 200, store.joinHuman(joinCode, humanName));
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("找不到這組邀請碼")) joinThrottle.recordFailure(source);
+      throw error;
+    }
     return;
   }
   if (method === "GET" && url.pathname === "/api/admin/tables") {

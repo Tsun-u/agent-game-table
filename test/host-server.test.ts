@@ -31,6 +31,14 @@ test("HTTP Host serves the Big Two table and shares one authority with Agent cli
   const managed = await fetch(`${host.url}/api/admin/tables`);
   assert.equal(managed.status, 200);
   assert.equal((await managed.json() as { tables: unknown[] }).tables.length, 2);
+  const lobby = await fetch(`${host.url}/api/lobby`);
+  assert.equal(lobby.status, 200);
+  const lobbyTables = (await lobby.json() as { tables: Array<Record<string, unknown>> }).tables;
+  assert.equal(lobbyTables.length, 2);
+  const listed = lobbyTables.find((table) => table.table_id === created.table.table_id)!;
+  assert.equal(listed.human_name, "阿童");
+  assert.equal(listed.join_code_hint, `${created.table.join_code[0]}•••••${created.table.join_code.at(-1)}`);
+  assert.equal("join_code" in listed, false, "the lobby never exposes a full invitation code");
   await fetch(`${host.url}/api/admin/tables/${other.table.table_id}`, { method: "DELETE" });
 
   assert.deepEqual(created.table.rule_options, { bombs_beat_anything: false, five_card_same_kind_only: false });
@@ -104,3 +112,20 @@ async function request<T>(baseUrl: string, path: string, options: { method: "GET
   assert.equal(response.ok, true, JSON.stringify(payload));
   return payload as T;
 }
+
+test("repeated wrong invitation codes from one address are throttled", async (context) => {
+  const host = await startAgentGameTableHost({ port: 0, store: new MultiplayerTableStore(() => createDeck()) });
+  context.after(() => host.close());
+  const created = await request<HumanTableResult>(host.url, "/api/tables", { method: "POST", body: { human_name: "阿童" } });
+
+  const guess = (code: string, address: string) => fetch(`${host.url}/api/human/join`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Forwarded-For": address },
+    body: JSON.stringify({ join_code: code, human_name: "路人" }),
+  });
+  for (let attempt = 0; attempt < 5; attempt += 1) assert.equal((await guess("WRONG00", "203.0.113.9")).status, 404);
+  const blocked = await guess(created.table.join_code, "203.0.113.9");
+  assert.equal(blocked.status, 429, "the correct code is refused too once the address is cooling down");
+  const neighbour = await guess(created.table.join_code, "203.0.113.10");
+  assert.equal(neighbour.status, 200, "another address is unaffected");
+});
