@@ -27,7 +27,7 @@
   const elements = Object.fromEntries(
     [
       "connectionBadge", "setupPanel", "createForm", "joinForm", "joinHumanName", "humanJoinCode", "humanName", "tablePanel", "joinCode", "copyInvite",
-      "pileZone", "pileLabel", "pileCards", "roundLabel", "turnLabel", "playerSeats", "startRound", "playCards", "pass", "selectedCount",
+      "pileZone", "pileLabel", "pileCards", "roundLabel", "turnLabel", "playerSeats", "startRound", "playCards", "pass", "selectedCount", "passCards", "passCount",
       "seatCount", "roster", "chatLog", "chatForm", "chatInput", "statusLine", "passphraseLabel", "createPassphrase", "adminKeyLabel", "adminKey",
       "managementPanel", "managementList", "managedTableCount", "managementHint", "refreshTables", "backToTables", "leaveTable",
       "lobbyPanel", "lobbyList", "lobbyCount", "lobbyHint",
@@ -251,6 +251,13 @@
   elements.startRound.addEventListener("click", () => gameWrite("/api/human/start-round", {}));
   elements.playCards.addEventListener("click", () => gameWrite("/api/human/action", { action: "play_cards", cards: [...state.selectedCards] }));
   elements.pass.addEventListener("click", () => gameWrite("/api/human/action", { action: "pass", cards: [] }));
+  elements.passCards.addEventListener("click", () => gameWrite("/api/human/action", { action: "pass_cards", cards: [...state.selectedCards] }));
+
+  /** 吃墩型遊戲（拱豬、傷心小棧）的桌面與手牌跟大老二不同，依 mode 分路。 */
+  const TRICK_MODES = new Set(["gongzhu", "hearts"]);
+  function isTrickGame(table) {
+    return TRICK_MODES.has(table.mode);
+  }
 
   elements.chatForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -400,8 +407,12 @@
 
   function describeRuleOptions(table) {
     const game = state.games[table.mode];
-    const enabled = (game?.options ?? []).filter((option) => table.rule_options?.[option.key]).map((option) => option.label);
-    return enabled.length ? `房主選項：${enabled.join("、")}` : `房主選項：${DEFAULT_RULE_TEXT[table.mode] || "預設規則"}`;
+    const options = game?.options ?? [];
+    const parts = options.filter((option) => option.type === "boolean" && table.rule_options?.[option.key]).map((option) => option.label);
+    const endMode = table.rule_options?.end_mode;
+    if (endMode === "score") parts.unshift(`打到 ${table.rule_options.end_score} 分結束`);
+    if (endMode === "rounds") parts.unshift(`打 ${table.rule_options.end_rounds} 局結束`);
+    return parts.length ? `房主選項：${parts.join("、")}` : `房主選項：${DEFAULT_RULE_TEXT[table.mode] || "預設規則"}`;
   }
 
   async function loadGames() {
@@ -474,6 +485,7 @@
     const you = table.players.find((seat) => seat.is_you);
     const ownedCards = new Set(you?.cards ?? []);
     for (const code of state.selectedCards) if (!ownedCards.has(code)) state.selectedCards.delete(code);
+    if (previousTable && previousTable.board?.phase !== table.board?.phase) state.selectedCards.clear();
     elements.setupPanel.hidden = true;
     elements.managementPanel.hidden = true;
     elements.lobbyPanel.hidden = true;
@@ -489,8 +501,12 @@
     const active = table.players.find((seat) => seat.seat_id === table.active_seat_id);
     elements.turnLabel.textContent = table.phase === "lobby"
       ? "等待玩家入座"
+      : table.phase === "game_over"
+        ? "整場結束"
       : table.phase === "ended"
         ? "本局結束，可以再開一局"
+      : table.board.phase === "passing"
+        ? `傳牌中，還有 ${table.pending_seat_ids.length} 人`
         : active
           ? `輪到 ${active.name}`
           : "牌局結算中";
@@ -521,8 +537,12 @@
         ? "你在觀戰區。四個座位都滿了，等有人起身再入座。"
         : "你在觀戰區。按「入座」加入下一局。";
     elements.startRound.hidden = !table.legal_actions.includes("start_round");
-    elements.playCards.hidden = table.phase !== "in_round";
-    elements.pass.hidden = table.phase !== "in_round";
+    const trick = isTrickGame(table);
+    elements.playCards.hidden = trick || table.phase !== "in_round";
+    elements.pass.hidden = trick || table.phase !== "in_round";
+    elements.passCards.hidden = !table.legal_actions.includes("pass_cards");
+    elements.passCards.disabled = state.busy || state.selectedCards.size !== 3;
+    elements.passCount.textContent = String(state.selectedCards.size);
     elements.playCards.disabled = state.busy || !table.legal_actions.includes("play_cards") || state.selectedCards.size === 0;
     elements.pass.disabled = state.busy || !table.legal_actions.includes("pass");
     elements.selectedCount.textContent = String(state.selectedCards.size);
@@ -596,6 +616,7 @@
   }
 
   function renderPile(table, previousTable) {
+    if (isTrickGame(table)) return renderTrickBoard(table);
     const changed = previousTable?.pile?.cards.join("|") !== table.pile.cards.join("|");
     elements.pileCards.replaceChildren(...table.pile.cards.map((code, index) => cardElement(code, changed ? index : -1)));
     elements.pileLabel.textContent = table.pile.hand_type
@@ -603,6 +624,61 @@
       : table.set_aside_cards.length
         ? `新墩 · 留牌 ${table.set_aside_cards.join(" ")}`
         : "新墩，自由領牌";
+  }
+
+  function renderTrickBoard(table) {
+    const board = table.board;
+    const nameOf = (seatId) => table.players.find((seat) => seat.seat_id === seatId)?.name ?? "";
+    const plays = board.trick?.plays ?? [];
+    elements.pileCards.replaceChildren(...plays.map((play, index) => {
+      const wrap = document.createElement("div");
+      wrap.className = `trick-play${play.seatId === board.trick.leader ? " leader" : ""}`;
+      wrap.append(cardElement(play.card, index));
+      const label = document.createElement("small");
+      label.textContent = nameOf(play.seatId);
+      wrap.append(label);
+      return wrap;
+    }));
+    if (board.phase === "passing") {
+      const direction = { left: "左家", right: "右家", across: "對家", none: "不傳" }[board.pass_direction] || "";
+      elements.pileLabel.textContent = `傳牌中：選 3 張傳給${direction}`;
+    } else if (board.phase === "ended" && board.last_round_scores) {
+      elements.pileLabel.textContent = `本局結算：${table.players.map((seat) => `${seat.name} ${formatDelta(board.last_round_scores[seat.seat_id] ?? 0)}`).join("、")}`;
+    } else if (board.phase === "trick") {
+      elements.pileLabel.textContent = plays.length
+        ? `第 ${(board.tricks_played ?? 0) + 1} 墩 · ${nameOf(board.trick.leader)} 首出`
+        : `第 ${(board.tricks_played ?? 0) + 1} 墩 · 等 ${nameOf(board.trick.leader)} 首出${board.hearts_broken ? "（紅心已破）" : ""}`;
+    } else {
+      elements.pileLabel.textContent = "等待開局";
+    }
+  }
+
+  function formatDelta(value) {
+    return value > 0 ? `+${value}` : String(value);
+  }
+
+  function trickHandCard(table, code) {
+    const legal = table.legal_plays.some((play) => play.cards[0] === code);
+    const passing = table.board.phase === "passing" && table.legal_actions.includes("pass_cards");
+    const card = cardElement(code);
+    card.classList.toggle("illegal", !legal && (passing || table.legal_actions.includes("play_card")));
+    if (passing) {
+      card.classList.add("selectable");
+      card.classList.toggle("selected", state.selectedCards.has(code));
+      card.setAttribute("aria-pressed", state.selectedCards.has(code) ? "true" : "false");
+      card.addEventListener("click", () => {
+        if (state.selectedCards.has(code)) state.selectedCards.delete(code);
+        else if (state.selectedCards.size < 3) state.selectedCards.add(code);
+        else return;
+        card.classList.toggle("selected", state.selectedCards.has(code));
+        card.setAttribute("aria-pressed", state.selectedCards.has(code) ? "true" : "false");
+        syncActionButtons(state.table);
+      });
+    } else if (legal && table.legal_actions.includes("play_card")) {
+      card.classList.add("selectable");
+      card.addEventListener("click", () => void gameWrite("/api/human/action", { action: "play_card", cards: [code] }));
+    }
+    return card;
   }
 
   function renderPlayers(table, previousTable) {
@@ -622,6 +698,13 @@
       const points = document.createElement("span");
       points.textContent = `${seat.hand_count} 張 · ${seat.game_score} 分`;
       heading.append(name, points);
+      if (isTrickGame(table)) {
+        const captured = table.board.captured_points?.[seat.seat_id] ?? [];
+        const chips = document.createElement("span");
+        chips.className = "captured-chips";
+        chips.textContent = captured.length ? `收：${captured.join(" ")}` : "";
+        heading.append(chips);
+      }
       const cards = document.createElement("div");
       cards.className = "cards compact";
       const previousSeat = previousTable?.round === table.round
@@ -632,6 +715,8 @@
       if (!seat.is_you && seat.hand_count > 0) {
         cards.classList.add("opponent-hand");
         cards.replaceChildren(...Array.from({ length: Math.min(seat.hand_count, 7) }, (_, index) => hiddenCard(index === 0 && shouldAnimate ? 0 : -1)));
+      } else if (seat.is_you && isTrickGame(table)) {
+        cards.replaceChildren(...seat.cards.map((code) => trickHandCard(table, code)));
       } else {
         cards.replaceChildren(...seat.cards.map((code, index) => cardElement(
           code,
@@ -788,6 +873,10 @@
   function resultText(seat, table) {
     const phase = table.phase;
     if (phase === "ended" && table.board.phase === "idle") return "本局流局";
+    if (isTrickGame(table)) {
+      if (phase === "ended" || phase === "game_over") return table.board.last_round_scores ? `本局 ${formatDelta(table.board.last_round_scores[seat.seat_id] ?? 0)}` : "";
+      return ({ active: table.board.phase === "passing" ? "選牌中" : "正在行動", waiting: "等待", sent: "已傳牌" })[seat.status] || "";
+    }
     if (phase === "ended") return seat.hand_count === 0 ? "本局勝出" : `剩下 ${seat.hand_count} 張`;
     return ({ active: "正在行動", waiting: "等待回合", passed: "本墩已 PASS", finished: "已出完手牌" })[seat.status] || "";
   }

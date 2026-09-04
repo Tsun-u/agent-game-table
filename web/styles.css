@@ -361,3 +361,9 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
 
 .rule-option-number, .rule-option-choice { display: grid; grid-template-columns: minmax(0, 1fr) 120px; align-items: center; gap: 10px; }
 .rule-option-number input, .rule-option-choice select { min-width: 0; padding: 6px 8px; }
+
+.trick-play { display: grid; justify-items: center; gap: 4px; }
+.trick-play small { color: var(--muted); font-size: 0.78rem; }
+.trick-play.leader small::before { content: "★ "; }
+.playing-card.illegal { opacity: 0.35; }
+.captured-chips { display: block; margin-top: 2px; color: var(--muted); font-size: 0.78rem; letter-spacing: 0.04em; }

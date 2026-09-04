@@ -381,7 +381,7 @@ function requireString(value: unknown, field: string): string {
 }
 
 function requireAction(value: unknown): TurnAction {
-  if (value !== "play_cards" && value !== "pass") throw new Error("action 必須是 play_cards 或 pass。");
+  if (typeof value !== "string" || !value.trim() || value.length > 40) throw new Error("action 必須是非空白字串，由該桌的遊戲引擎驗證。");
   return value;
 }
 

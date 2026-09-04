@@ -138,7 +138,7 @@ test("each Agent receives independent turn events and only its own hand", async 
   const opened = store.startRound(owner.human_token, tableVersion(store, owner.human_token), "start-events-01");
   assert.equal(opened.active_seat_id, opened.viewer_seat_id);
   assert.deepEqual(opened.legal_actions, ["play_cards"]);
-  assert.deepEqual(opened.legal_plays, [], "human views do not need Agent move enumeration");
+  assert.equal(opened.legal_plays.every((play) => play.cards.includes("♣3")), true, "humans get legal plays too so the UI can grey out illegal cards");
 
   await store.waitForAgentEvents(first.agent_token, 0);
   await store.waitForAgentEvents(second.agent_token, 0);

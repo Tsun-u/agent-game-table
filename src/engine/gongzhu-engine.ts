@@ -17,7 +17,7 @@ import { legalFollows, sortTrickCards, suitOf, trickWinner, type TrickPlay } fro
 import type { DealInput, EngineEvent, EngineTransition, GameBoardView, GameEngine, GameRules, GameSummary, LegalAction, LegalPlay, SeatAction } from "./types.js";
 
 export type PassDirection = "left" | "right" | "across" | "none";
-export type GongzhuSeatStatus = "waiting" | "active" | "passed";
+export type GongzhuSeatStatus = "waiting" | "active" | "sent";
 
 export interface GongzhuState {
   readonly phase: "passing" | "trick" | "ended";
@@ -154,7 +154,7 @@ export function createGongzhuEngine(variant: GongzhuVariant): GameEngine<Gongzhu
       const capturedPoints: Record<string, readonly string[]> = {};
       for (const seatId of state.order) {
         passed[seatId] = seatId in state.pendingPasses;
-        status[seatId] = state.phase === "passing" ? (passed[seatId] ? "passed" : "active") : state.active === seatId ? "active" : "waiting";
+        status[seatId] = state.phase === "passing" ? (passed[seatId] ? "sent" : "active") : state.active === seatId ? "active" : "waiting";
         capturedPoints[seatId] = (state.captured[seatId] ?? []).filter((card) => isPointCard(card, state.variant));
       }
       return {

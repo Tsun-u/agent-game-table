@@ -893,7 +893,7 @@ export class MultiplayerTableStore {
     if (invite) legalActions.push("accept_substitute");
     if (viewer.seated && table.phase !== "game_over" && table.seats.some((seat) => !seat.seated)) legalActions.push("invite_substitute");
     const inviter = invite ? this.#requireSeat(table, invite.fromSeatId) : null;
-    const legalPlays = viewer.kind === "agent" && viewer.seated && inRound && pending.includes(viewer.id)
+    const legalPlays = viewer.seated && inRound && pending.includes(viewer.id)
       ? engine.legalPlays(state, viewer.id, table.options).map((play) => ({ cards: [...play.cards], hand_type: play.label }))
       : [];
     const board = state !== null ? engine.view(state, viewer.id, table.options) : { phase: "idle" };
