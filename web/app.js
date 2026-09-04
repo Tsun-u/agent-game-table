@@ -705,9 +705,9 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
   }
 
   function renderPile(table, previousTable) {
+    elements.pileCards.classList.toggle("pick-table", isPickGame(table));
     if (isTrickGame(table)) return renderTrickBoard(table);
     if (isPickGame(table)) return renderPickBoard(table);
-    elements.pileCards.classList.remove("pick-table");
     const changed = previousTable?.pile?.cards.join("|") !== table.pile.cards.join("|");
     elements.pileCards.replaceChildren(...table.pile.cards.map((code, index) => cardElement(code, changed ? index : -1)));
     elements.pileLabel.textContent = table.pile.hand_type
@@ -750,7 +750,6 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     const selected = state.selectedCards.size === 1 ? [...state.selectedCards][0] : null;
     const canPlay = table.legal_actions.includes("play_card");
     const matchable = new Set(selected ? table.legal_plays.filter((play) => play.cards[0] === selected && play.cards.length === 2).map((play) => play.cards[1]) : []);
-    elements.pileCards.classList.add("pick-table");
     const tableCards = (board.table ?? []).map((code) => {
       const card = cardElement(code);
       if (canPlay && matchable.has(code)) {

@@ -66,7 +66,7 @@ const tableSchema = z.object({
   }),
   set_aside_cards: z.array(z.string()),
   legal_actions: z.array(z.string()),
-  legal_plays: z.array(z.object({ cards: z.array(z.string()), hand_type: z.string() })),
+  legal_plays: z.array(z.object({ action: z.string(), cards: z.array(z.string()), hand_type: z.string() })),
   recent_chat: z.array(chatSchema),
   last_event_id: z.number().int().nonnegative(),
 });

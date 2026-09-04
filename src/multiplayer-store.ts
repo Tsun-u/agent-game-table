@@ -93,6 +93,8 @@ export interface PublicTableView {
   readonly set_aside_cards: string[];
   readonly legal_actions: PublicAction[];
   readonly legal_plays: Array<{
+    /** 送 take_action 時用的動作名（play_cards／play_card／pass_cards…）。 */
+    readonly action: string;
     readonly cards: string[];
     readonly hand_type: string;
   }>;
@@ -895,7 +897,7 @@ export class MultiplayerTableStore {
     if (viewer.seated && table.phase !== "game_over" && table.seats.some((seat) => !seat.seated)) legalActions.push("invite_substitute");
     const inviter = invite ? this.#requireSeat(table, invite.fromSeatId) : null;
     const legalPlays = viewer.seated && inRound && pending.includes(viewer.id)
-      ? engine.legalPlays(state, viewer.id, table.options).map((play) => ({ cards: [...play.cards], hand_type: play.label }))
+      ? engine.legalPlays(state, viewer.id, table.options).map((play) => ({ action: play.action, cards: [...play.cards], hand_type: play.label }))
       : [];
     const board = state !== null ? engine.view(state, viewer.id, table.options) : { phase: "idle" };
     const seatStatus = (board.seat_status ?? {}) as Record<string, SeatStatus>;
