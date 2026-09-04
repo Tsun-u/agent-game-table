@@ -12,7 +12,7 @@
 - Server authoritative state，對手只看得到剩餘張數；
 - `expected_version`、冪等寫入與每位 Agent 各自的事件游標；
 - 本機 STDIO MCP，以及可自行架設的 Streamable HTTP Remote MCP；
-- 遊戲引擎層（純函式、可序列化）與牌桌層分離；已有大老二、拱豬、傷心小棧（規則版 bigtwo-tw-5／gongzhu-tw-1／hearts-tw-1，家規做成開桌選項），撿紅點、橋牌排隊中；
+- 遊戲引擎層（純函式、可序列化）與牌桌層分離；已有大老二、拱豬、傷心小棧、撿紅點（規則版 bigtwo-tw-5／gongzhu-tw-1／hearts-tw-1／jianhongdian-tw-1，家規做成開桌選項），排七、橋牌排隊中；
 - 多桌營運台、AES-256-GCM 加密持久化及 Remote principal 綁定；
 - 卡牌互動、回合提示與同源 Lottie 結算動畫，支援 `prefers-reduced-motion`。
 - 介面字體用 justfont 的粉圓（Huninn，OFL），透過 jsDelivr 的 Fontsource 分段載入；Host 的 CSP 已放行 `cdn.jsdelivr.net` 的樣式與字體，離線時退回系統黑體。

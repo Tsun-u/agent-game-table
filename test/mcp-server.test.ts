@@ -160,6 +160,33 @@ test("MCP Agents can play a Gong Zhu trick and get that table's rules", async (c
   }
 });
 
+test("MCP Agents can open a Jianhongdian table, capture with a two-card play and read the pick board", async (context) => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  const host = await startAgentGameTableHost({ port: 0, store });
+  context.after(() => host.close());
+  const created = store.createTable("阿童", undefined, "jianhongdian");
+  const client = await connectMcp(new AgentGameTableHostClient(host.url), "jh-小葵", context);
+  const joined = await client.callTool({ name: "join_table", arguments: { join_code: created.table.join_code, agent_name: "小葵" } });
+  assert.equal((joined.structuredContent as { rules: { rules_version: string } }).rules.rules_version, "jianhongdian-tw-1");
+  store.humanTakeSeat(created.human_token, store.getHumanView(created.human_token).version, "jh-owner-seat");
+  await seatVia(client, "jh-seat-agent");
+  store.startRound(created.human_token, store.getHumanView(created.human_token).version, "jh-start");
+  const humanView = store.getHumanView(created.human_token);
+  const humanPlay = humanView.legal_plays[0]!;
+  store.humanAction(created.human_token, "play_card", humanView.version, "jh-human-play", [...humanPlay.cards]);
+  const view = tableFrom(await client.callTool({ name: "get_table_view", arguments: {} }));
+  assert.deepEqual(view.legal_actions, ["play_card"]);
+  assert.equal(view.legal_plays.every((play) => play.cards.length === 1 || play.cards.length === 2), true);
+  const board = view.board as unknown as { table: string[]; pile_count: number; last_flip: { seat_id: string } | null };
+  assert.equal(board.pile_count, 23);
+  assert.equal(board.last_flip?.seat_id, humanView.viewer_seat_id);
+  const choice = view.legal_plays.find((play) => play.cards.length === 2) ?? view.legal_plays[0]!;
+  const played = await client.callTool({ name: "take_action", arguments: { action: "play_card", cards: choice.cards, expected_version: view.version, idempotency_key: "jh-agent-play" } });
+  assert.equal(played.isError, undefined, JSON.stringify(played.content));
+  const after = (played.structuredContent as { table: { board: { pile_count: number } } }).table.board;
+  assert.equal(after.pile_count, 22);
+});
+
 test("MCP Agents see every seat pending during Hearts passing and can pass three cards", async (context) => {
   const store = new MultiplayerTableStore(() => createDeck());
   const host = await startAgentGameTableHost({ port: 0, store });

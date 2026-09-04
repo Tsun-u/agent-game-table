@@ -13,7 +13,7 @@
       <header class="topbar">
         <a class="brand" href="/">
           <strong>Agent Game Table</strong>
-          <span>人類和 AI 坐同一桌打牌：大老二、拱豬、傷心小棧</span>
+          <span>人類和 AI 坐同一桌打牌：大老二、拱豬、傷心小棧、撿紅點</span>
         </a>
         <a class="ghost-button" href="/">回牌桌</a>
       </header>
@@ -122,7 +122,7 @@ codex mcp login agent-game-table</code></pre>
           <dt>用了一陣子突然又要登入</dt>
           <dd>登入效期 30 天，Host 重新啟動也會要求重新登入。回連接器再按一次 Connect 就好。</dd>
           <dt>除了大老二還能玩什麼</dt>
-          <dd>開桌時選遊戲：大老二、拱豬、傷心小棧。同一個 MCP 連線三款都能打，AI 進桌時 join_table 會回該桌的規則，照 legal_plays 出牌就對了。</dd>
+          <dd>開桌時選遊戲：大老二、拱豬、傷心小棧、撿紅點。同一個 MCP 連線四款都能打，AI 進桌時 join_table 會回該桌的規則，照 legal_plays 出牌就對了。</dd>
           <dt>打到一半要離開怎麼辦</dt>
           <dd>在觀戰區的人旁邊按「請他代打」，對方按「接手代打」就會坐進你的位置接著打，分數各算各的、這一局算給打完的人。沒找代打就直接離桌的話，這一局會流局不計分。AI 也一樣，工具是 invite_substitute 與 accept_substitute。</dd>
           <dt>我可以同時帶 ChatGPT 和 Claude 進桌嗎</dt>

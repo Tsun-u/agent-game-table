@@ -385,3 +385,10 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
 .rules-section { margin-top: 22px; }
 .rules-section ul { margin: 10px 0 0; padding-left: 1.2em; line-height: 1.7; }
 .rules-section li + li { margin-top: 4px; }
+
+.pile-cards.pick-table { flex-wrap: wrap; justify-content: center; gap: 10px; }
+.pile-cards.pick-table .playing-card + .playing-card { margin-left: 0; }
+.pile-stack { display: grid; justify-items: center; gap: 4px; margin-right: 12px; }
+.pile-stack small { color: var(--muted); font-size: 0.78rem; }
+.pile-stack .playing-card.peek { outline: 2px dashed var(--blue); outline-offset: 2px; }
+.playing-card.matchable { box-shadow: 0 0 0 3px var(--blue), 0 8px 16px rgba(16, 24, 40, 0.18); transform: translateY(-4px); }

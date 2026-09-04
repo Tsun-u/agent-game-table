@@ -755,8 +755,9 @@ export class MultiplayerTableStore {
   }
 
   #seatAction(table: Table, seat: Seat, action: TurnAction, expectedVersion: number, idempotencyKey: string, cards: readonly string[]): PublicTableView {
-    const normalizedCards = cards.map((card) => card.trim()).filter(Boolean).sort();
-    const operation = `take_action:${action}:${normalizedCards.join(",")}`;
+    // 牌的順序對撿紅點有意義（手牌在前、桌面牌在後），只有冪等鍵用排序後的版本。
+    const normalizedCards = cards.map((card) => card.trim()).filter(Boolean);
+    const operation = `take_action:${action}:${[...normalizedCards].sort().join(",")}`;
     const replay = this.#replay<PublicTableView>(table, seat.id, idempotencyKey, operation);
     if (replay) return replay;
     this.#assertVersion(table, expectedVersion);

@@ -1,3 +1,4 @@
+import { displayOptionValue } from "./option-format.js";
 import type { GameRules, OptionDescription } from "./types.js";
 
 export type GongzhuVariant = "gongzhu" | "hearts";
@@ -26,13 +27,6 @@ export const DEFAULT_HEARTS_OPTIONS: GongzhuOptions = Object.freeze({
   end_mode: "score", end_score: -100, end_rounds: 4,
   grand_slam: false, hearts_low_zero: false, transformer_alone_bonus: false, heart_break_lead: true, partnership: false,
 });
-
-/** 規則表給人也給 AI 讀，選項值用「開／關」與選項標籤呈現，不露 true／false 或 key。 */
-function displayOptionValue(option: OptionDescription, value: string | number | boolean): string | number {
-  if (option.type === "boolean") return value ? "開" : "關";
-  if (option.type === "choice") return option.choices.find((choice) => choice.value === value)?.label ?? String(value);
-  return value as number;
-}
 
 const END_OPTIONS = (defaultScore: number): OptionDescription[] => [
   { key: "end_mode", type: "choice", label: "結束方式", description: "分數制：任一家累積到結束分數就整場結束；局數制：打滿指定局數結算。", default: "score", choices: [{ value: "score", label: "分數制" }, { value: "rounds", label: "局數制" }] },

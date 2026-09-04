@@ -28,7 +28,7 @@
   const elements = Object.fromEntries(
     [
       "connectionBadge", "setupPanel", "createForm", "joinForm", "joinHumanName", "humanJoinCode", "humanName", "tablePanel", "joinCode", "copyInvite", "rulesLink",
-      "pileZone", "pileLabel", "pileCards", "roundLabel", "turnLabel", "playerSeats", "startRound", "playCards", "pass", "selectedCount", "passCards", "passCount",
+      "pileZone", "pileLabel", "pileCards", "roundLabel", "turnLabel", "playerSeats", "startRound", "playCards", "pass", "selectedCount", "passCards", "passCount", "layDown",
       "seatCount", "roster", "chatLog", "chatForm", "chatInput", "statusLine", "passphraseLabel", "createPassphrase", "adminKeyLabel", "adminKey",
       "managementPanel", "managementList", "managedTableCount", "managementHint", "refreshTables", "backToTables", "leaveTable",
       "lobbyPanel", "lobbyList", "lobbyCount", "lobbyHint",
@@ -261,6 +261,13 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
   elements.playCards.addEventListener("click", () => gameWrite("/api/human/action", { action: "play_cards", cards: [...state.selectedCards] }));
   elements.pass.addEventListener("click", () => gameWrite("/api/human/action", { action: "pass", cards: [] }));
   elements.passCards.addEventListener("click", () => gameWrite("/api/human/action", { action: "pass_cards", cards: [...state.selectedCards] }));
+  elements.layDown.addEventListener("click", () => gameWrite("/api/human/action", { action: "play_card", cards: [...state.selectedCards] }));
+
+  /** 撿紅點：選一張手牌後，桌面可配的牌會亮起，點桌面牌配對收走，或按「放到桌上」不配。 */
+  const PICK_MODES = new Set(["jianhongdian"]);
+  function isPickGame(table) {
+    return PICK_MODES.has(table.mode);
+  }
 
   /** 吃墩型遊戲（拱豬、傷心小棧）的桌面與手牌跟大老二不同，依 mode 分路。 */
   const TRICK_MODES = new Set(["gongzhu", "hearts"]);
@@ -417,6 +424,7 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
 
   const DEFAULT_RULE_TEXT = {
     bigtwo: "台灣標準（五張只能被五張壓、葫蘆可壓順子）",
+    jianhongdian: "台灣標準（♠A 30＋♣A 40、叨牌）",
     gongzhu: "台灣標準（紅心照牌面、♥4 -10、變壓器獨得 +50）",
     hearts: "台灣標準（每張紅心 -1、♠Q -13、射月）",
   };
@@ -432,6 +440,11 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     const game = state.games[table.mode];
     const options = game?.options ?? [];
     const parts = options.filter((option) => option.type === "boolean" && table.rule_options?.[option.key]).map((option) => option.label);
+    for (const option of options) {
+      if (option.type !== "choice" || option.key === "end_mode") continue;
+      const chosen = option.choices.find((choice) => choice.value === table.rule_options?.[option.key]);
+      if (chosen && chosen.value !== option.default) parts.push(`${option.label}：${chosen.label}`);
+    }
     const endMode = table.rule_options?.end_mode;
     if (endMode === "score") parts.unshift(`打到 ${table.rule_options.end_score} 分結束`);
     if (endMode === "rounds") parts.unshift(`打 ${table.rule_options.end_rounds} 局結束`);
@@ -610,9 +623,11 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
         ? "你在觀戰區。四個座位都滿了，等有人起身再入座。"
         : "你在觀戰區。按「入座」加入下一局。";
     elements.startRound.hidden = !table.legal_actions.includes("start_round");
-    const trick = isTrickGame(table);
+    const trick = isTrickGame(table) || isPickGame(table);
     elements.playCards.hidden = trick || table.phase !== "in_round";
     elements.pass.hidden = trick || table.phase !== "in_round";
+    elements.layDown.hidden = !isPickGame(table) || !table.legal_actions.includes("play_card");
+    elements.layDown.disabled = state.busy || state.selectedCards.size !== 1;
     elements.passCards.hidden = !table.legal_actions.includes("pass_cards");
     elements.passCards.disabled = state.busy || state.selectedCards.size !== 3;
     elements.passCount.textContent = String(state.selectedCards.size);
@@ -691,6 +706,8 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
 
   function renderPile(table, previousTable) {
     if (isTrickGame(table)) return renderTrickBoard(table);
+    if (isPickGame(table)) return renderPickBoard(table);
+    elements.pileCards.classList.remove("pick-table");
     const changed = previousTable?.pile?.cards.join("|") !== table.pile.cards.join("|");
     elements.pileCards.replaceChildren(...table.pile.cards.map((code, index) => cardElement(code, changed ? index : -1)));
     elements.pileLabel.textContent = table.pile.hand_type
@@ -725,6 +742,69 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     } else {
       elements.pileLabel.textContent = "等待開局";
     }
+  }
+
+  function renderPickBoard(table) {
+    const board = table.board;
+    const nameOf = (seatId) => table.players.find((seat) => seat.seat_id === seatId)?.name ?? "";
+    const selected = state.selectedCards.size === 1 ? [...state.selectedCards][0] : null;
+    const canPlay = table.legal_actions.includes("play_card");
+    const matchable = new Set(selected ? table.legal_plays.filter((play) => play.cards[0] === selected && play.cards.length === 2).map((play) => play.cards[1]) : []);
+    elements.pileCards.classList.add("pick-table");
+    const tableCards = (board.table ?? []).map((code) => {
+      const card = cardElement(code);
+      if (canPlay && matchable.has(code)) {
+        card.classList.add("selectable", "matchable");
+        card.addEventListener("click", () => void gameWrite("/api/human/action", { action: "play_card", cards: [selected, code] }));
+      }
+      return card;
+    });
+    const pile = document.createElement("div");
+    pile.className = "pile-stack";
+    pile.append(hiddenCard());
+    const count = document.createElement("small");
+    count.textContent = `牌堆 ${board.pile_count ?? 0}`;
+    pile.append(count);
+    if (board.bottom_card) {
+      const peek = cardElement(board.bottom_card);
+      peek.classList.add("peek");
+      peek.title = "叨牌：牌堆最後一張，只有你看得到";
+      const peekLabel = document.createElement("small");
+      peekLabel.textContent = "叨牌";
+      pile.append(peek, peekLabel);
+    }
+    elements.pileCards.replaceChildren(pile, ...tableCards);
+    if (board.phase === "ended" && board.last_round_scores) {
+      elements.pileLabel.textContent = `本局結算：${table.players.map((seat) => `${seat.name} ${formatDelta(board.last_round_scores[seat.seat_id] ?? 0)}`).join("、")}`;
+    } else if (board.phase === "play") {
+      const flip = board.last_flip
+        ? `${nameOf(board.last_flip.seat_id)} 翻出 ${board.last_flip.card}${board.last_flip.captured ? `，收走 ${board.last_flip.captured}` : "，留在桌上"}`
+        : "";
+      const hint = canPlay ? (selected ? (matchable.size ? "點亮起的桌面牌配對，或按「放到桌上」" : "沒有可配的牌，按「放到桌上」") : "先點一張手牌") : "";
+      elements.pileLabel.textContent = [flip, hint].filter(Boolean).join(" · ") || "桌面";
+    } else {
+      elements.pileLabel.textContent = "等待開局";
+    }
+  }
+
+  function pickHandCard(table, code) {
+    const card = cardElement(code);
+    if (!table.legal_actions.includes("play_card")) return card;
+    card.classList.add("selectable");
+    card.classList.toggle("selected", state.selectedCards.has(code));
+    card.setAttribute("aria-pressed", state.selectedCards.has(code) ? "true" : "false");
+    card.addEventListener("click", () => {
+      const wasSelected = state.selectedCards.has(code);
+      state.selectedCards.clear();
+      if (!wasSelected) state.selectedCards.add(code);
+      for (const sibling of card.parentElement?.querySelectorAll(".playing-card") ?? []) {
+        sibling.classList.toggle("selected", sibling === card && !wasSelected);
+        sibling.setAttribute("aria-pressed", sibling === card && !wasSelected ? "true" : "false");
+      }
+      renderPickBoard(state.table);
+      syncActionButtons(state.table);
+    });
+    return card;
   }
 
   function formatDelta(value) {
@@ -772,11 +852,12 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
       const points = document.createElement("span");
       points.textContent = `${seat.hand_count} 張 · ${seat.game_score} 分`;
       heading.append(name, points);
-      if (isTrickGame(table)) {
+      if (isTrickGame(table) || isPickGame(table)) {
         const captured = table.board.captured_points?.[seat.seat_id] ?? [];
         const chips = document.createElement("span");
         chips.className = "captured-chips";
-        chips.textContent = captured.length ? `收：${captured.join(" ")}` : "";
+        const earned = isPickGame(table) ? `（${table.board.points_so_far?.[seat.seat_id] ?? 0} 點）` : "";
+        chips.textContent = captured.length ? `收：${captured.join(" ")}${earned}` : earned;
         heading.append(chips);
       }
       const cards = document.createElement("div");
@@ -791,6 +872,8 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
         cards.replaceChildren(...Array.from({ length: Math.min(seat.hand_count, 7) }, (_, index) => hiddenCard(index === 0 && shouldAnimate ? 0 : -1)));
       } else if (seat.is_you && isTrickGame(table)) {
         cards.replaceChildren(...seat.cards.map((code) => trickHandCard(table, code)));
+      } else if (seat.is_you && isPickGame(table)) {
+        cards.replaceChildren(...seat.cards.map((code) => pickHandCard(table, code)));
       } else {
         cards.replaceChildren(...seat.cards.map((code, index) => cardElement(
           code,
@@ -947,7 +1030,7 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
   function resultText(seat, table) {
     const phase = table.phase;
     if (phase === "ended" && table.board.phase === "idle") return "本局流局";
-    if (isTrickGame(table)) {
+    if (isTrickGame(table) || isPickGame(table)) {
       if (phase === "ended" || phase === "game_over") return table.board.last_round_scores ? `本局 ${formatDelta(table.board.last_round_scores[seat.seat_id] ?? 0)}` : "";
       return ({ active: table.board.phase === "passing" ? "選牌中" : "正在行動", waiting: "等待", sent: "已傳牌" })[seat.status] || "";
     }

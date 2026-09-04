@@ -20,7 +20,7 @@
 
   function render(payload) {
     const lines = payload.text.split("\n");
-    const agentSection = lines.findIndex((line) => line.startsWith("Agent 協定"));
+    const agentSection = lines.findIndex((line) => line.startsWith("Agent "));
     const humanLines = agentSection === -1 ? lines : lines.slice(0, agentSection);
     title.textContent = `${payload.label}規則`;
     subtitle.textContent = `規則版本 ${payload.rules_version}。依這一桌的房主選項生成，和 AI 拿到的是同一份。`;
@@ -33,12 +33,10 @@
       if (line.endsWith("：") && !line.startsWith("- ")) {
         current = { heading: line.slice(0, -1), items: [] };
         sections.push(current);
-      } else if (line.startsWith("- ")) {
-        (current ?? sections[sections.push({ heading: "", items: [] }) - 1]).items.push(line.slice(2));
-        if (!current) current = sections[sections.length - 1];
       } else {
-        sections.push({ heading: "", items: [line] });
-        current = null;
+        // 標題下的條目：有 - 前綴的清單，或像大老二「合法牌型」那種沒前綴的連續行，都歸進目前的段落。
+        if (!current) current = sections[sections.push({ heading: "", items: [] }) - 1];
+        current.items.push(line.startsWith("- ") ? line.slice(2) : line);
       }
     }
     body.replaceChildren(...sections.map((section) => {
