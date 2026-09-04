@@ -31,12 +31,24 @@
       "seatCount", "roster", "chatLog", "chatForm", "chatInput", "statusLine", "passphraseLabel", "createPassphrase", "adminKeyLabel", "adminKey",
       "managementPanel", "managementList", "managedTableCount", "managementHint", "refreshTables", "backToTables", "leaveTable",
       "lobbyPanel", "lobbyList", "lobbyCount", "lobbyHint",
-      "tableStatus", "roundCelebration", "roundCelebrationAnimation", "roundCelebrationLabel", "gameModeLabel", "gameMode", "ruleOptionFields", "ruleOptions", "tableName", "railToggle", "rail", "handDock", "seatButton", "unseatButton", "dockNote", "spectatorList", "spectatorCount",
+      "tableStatus", "roundCelebration", "roundCelebrationAnimation", "roundCelebrationLabel", "gameModeLabel", "gameMode", "ruleOptionFields", "ruleOptions", "tableName", "railToggle", "rail", "handDock", "seatButton", "unseatButton", "acceptSubstitute", "dockNote", "spectatorList", "spectatorCount",
     ].map((id) => [id, document.getElementById(id)]),
   );
 
   elements.seatButton.addEventListener("click", () => void changeSeat("/api/human/seat", "已入座，等房主開局。"));
   elements.unseatButton.addEventListener("click", () => void changeSeat("/api/human/unseat", "已到觀戰區。"));
+  elements.acceptSubstitute.addEventListener("click", () => void changeSeat("/api/human/accept-substitute", "你接手了這個座位，接著打。"));
+
+  async function inviteSubstitute(seat) {
+    await run(async () => {
+      const result = await api("/api/human/invite-substitute", {
+        method: "POST",
+        body: { seat_id: seat.seat_id, expected_version: state.table.version, idempotency_key: operationKey("human-invite-substitute") },
+      });
+      setTable(result.table);
+      setStatus(`已邀請 ${seat.name} 代打，對方按「接手代打」就會坐進你的位置。`);
+    });
+  }
 
   async function changeSeat(path, message) {
     await run(async () => {
@@ -469,10 +481,14 @@
     const spectating = table.viewer_role === "spectator";
     elements.seatButton.hidden = !table.legal_actions.includes("take_seat");
     elements.unseatButton.hidden = !table.legal_actions.includes("leave_seat");
+    elements.acceptSubstitute.hidden = !table.legal_actions.includes("accept_substitute");
+    elements.acceptSubstitute.disabled = state.busy;
     elements.seatButton.disabled = state.busy;
     elements.unseatButton.disabled = state.busy;
     elements.dockNote.hidden = !spectating;
-    elements.dockNote.textContent = table.phase === "in_round"
+    elements.dockNote.textContent = table.substitute_invite
+      ? `${table.substitute_invite.from_name} 邀請你代打：接手後你會坐進對方的位置，接著打完這局。`
+      : table.phase === "in_round"
       ? "你在觀戰區看這一局。等這局結束就可以入座。"
       : table.players.length >= 4
         ? "你在觀戰區。四個座位都滿了，等有人起身再入座。"
@@ -628,6 +644,16 @@
       const kind = document.createElement("small");
       kind.textContent = `${seat.kind === "human" ? "人類" : "Agent"}${seat.is_you ? "（你）" : ""}`;
       row.append(dot, label, kind);
+      if (role === "spectator" && !seat.is_you && table.legal_actions.includes("invite_substitute")) {
+        const invite = document.createElement("button");
+        invite.type = "button";
+        invite.className = "seat-reconnect";
+        invite.textContent = "請他代打";
+        invite.title = `邀請 ${seat.name} 接手你的座位`;
+        invite.disabled = state.busy;
+        invite.addEventListener("click", () => void inviteSubstitute(seat));
+        row.append(invite);
+      }
       if (seat.kind === "agent" && table.viewer_is_owner) {
         const reconnect = document.createElement("button");
         reconnect.type = "button";

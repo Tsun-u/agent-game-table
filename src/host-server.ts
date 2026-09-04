@@ -170,6 +170,18 @@ async function routeRequest(
       });
       return;
     }
+    if (method === "POST" && url.pathname === "/api/human/invite-substitute") {
+      sendJson(response, 200, {
+        table: store.humanInviteSubstitute(token, requireString(body.seat_id, "seat_id"), requirePositiveInteger(body.expected_version, "expected_version"), requireIdempotencyKey(body.idempotency_key)),
+      });
+      return;
+    }
+    if (method === "POST" && url.pathname === "/api/human/accept-substitute") {
+      sendJson(response, 200, {
+        table: store.humanAcceptSubstitute(token, requirePositiveInteger(body.expected_version, "expected_version"), requireIdempotencyKey(body.idempotency_key)),
+      });
+      return;
+    }
     if (method === "POST" && url.pathname === "/api/human/start-round") {
       sendJson(response, 200, {
         table: store.startRound(
@@ -265,6 +277,18 @@ async function routeRequest(
     if (method === "POST" && url.pathname === "/api/agent/unseat") {
       sendJson(response, 200, {
         table: store.agentLeaveSeat(token, requirePositiveInteger(body.expected_version, "expected_version"), requireIdempotencyKey(body.idempotency_key)),
+      });
+      return;
+    }
+    if (method === "POST" && url.pathname === "/api/agent/invite-substitute") {
+      sendJson(response, 200, {
+        table: store.agentInviteSubstitute(token, requireString(body.seat_id, "seat_id"), requirePositiveInteger(body.expected_version, "expected_version"), requireIdempotencyKey(body.idempotency_key)),
+      });
+      return;
+    }
+    if (method === "POST" && url.pathname === "/api/agent/accept-substitute") {
+      sendJson(response, 200, {
+        table: store.agentAcceptSubstitute(token, requirePositiveInteger(body.expected_version, "expected_version"), requireIdempotencyKey(body.idempotency_key)),
       });
       return;
     }

@@ -90,7 +90,7 @@ Remote 模式由 `npm run start:remote` 啟動同一套人類 UI、Host API 與 
 
 視圖信封由牌桌層決定，桌面由引擎決定：`PublicTableView.board` 的形狀依遊戲而異（大老二是 `pile / set_aside_cards / opening_required_card / seat_status`），`hand` 是你自己的手牌，`pending_seat_ids` 是現在可以行動的席位（傳牌、叫牌類階段可以同時多個；`active_seat_id` 是相容欄位，等於第一個）。牌桌 phase 是 `lobby | in_round | ended | game_over`，局內細分階段在 `board.phase`。`players[].cards`、`pile`、`set_aside_cards` 這幾個舊欄位暫時保留給既有 client，下一款遊戲上線時移除。
 
-局中有人離桌一律流局不計分（`board.phase` 回到 `idle`），房主可以直接再開一局；這是為了搭配「代打」設計：要中離的人先邀觀戰者接手，沒接手就流局。
+局中有人離桌一律流局不計分（`board.phase` 回到 `idle`），房主可以直接再開一局。要中離的人先用代打：座位上的人邀觀戰區的某人（人類或 Agent 都可以），對方接受後帶著自己的累積分數坐進那個位置、繼承手牌與輪次，原本的人退到觀戰區；分數跟人走，正在打的那局算給打到結局的人。邀請 10 分鐘內有效、不落地，一個人同時只有一張有效邀請。
 
 快照格式版本 2：每桌多 `mode` 與 `game`（引擎序列化的一局狀態），座位不再帶手牌；載入版本 1 的檔案會自動把大老二欄位組回引擎狀態，不用清桌。
 
@@ -179,6 +179,8 @@ Agent instructions 會要求它持續參與後續牌局，直到人類結束測�
 | `join_table` | 用邀請碼進桌，先在觀戰區；或搭配人類提供的 `reconnect_code` 接回原成員身分 |
 | `take_seat` | 局間從觀戰區入座（最多 4 席），下一局會被發牌 |
 | `leave_seat` | 局間起身回觀戰區讓位，分數跟著成員保留；進行中不能起身 |
+| `invite_substitute` | 在座位上邀觀戰區的某人代打（局中、局間都可以）；對方接手後帶著自己的分數坐進你的位置，你退到觀戰區 |
+| `accept_substitute` | 接受 `substitute_invite` 裡的代打邀請，立刻繼承對方的手牌與輪次 |
 | `get_table_view` | 讀取最新公開牌桌、自己的座位、合法動作與本回合所有 `legal_plays` |
 | `leave_table` | 永久離桌、撤銷座位 token，並讓同一 process 可以加入其他牌桌 |
 | `take_action` | 輪到自己時執行 `play_cards`／`pass` |

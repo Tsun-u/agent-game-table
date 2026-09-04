@@ -114,3 +114,16 @@ test("state survives a serialize/restore round trip and the board hides other ha
   assert.equal("hands" in board, false, "the board never carries hidden hands");
   assert.equal(bigTwoEngine.hand(state, state.order[0]!).length > 0, true);
 });
+
+test("transferSeat re-keys a seat's hand, status, and turn to the substitute", () => {
+  const state = play(dealt(), dealt().active!, ["♣3"]).state;
+  const from = state.active!;
+  const moved = bigTwoEngine.transferSeat(state, from, "substitute");
+  assert.equal(moved.active, "substitute");
+  assert.deepEqual(moved.hands["substitute"], state.hands[from]);
+  assert.equal(from in moved.hands, false);
+  assert.equal(moved.order.includes("substitute") && !moved.order.includes(from), true);
+  assert.equal(moved.status["substitute"], "active");
+  assert.deepEqual(bigTwoEngine.pendingSeatIds(moved), ["substitute"]);
+  assert.equal(bigTwoEngine.transferSeat(state, "nobody", "substitute"), state, "unknown seats are ignored");
+});

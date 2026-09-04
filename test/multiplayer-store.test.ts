@@ -57,6 +57,56 @@ test("one email is one identity: a re-login with a new client_id reconnects the 
   assert.throws(() => store.resumeAgentForPrincipal("member:tong@example.com"), /多個 Agent/);
 });
 
+test("a seated player can hand the seat to a spectator mid-round; the finisher takes that round's score", () => {
+  const store = new MultiplayerTableStore(() => twoPlayerDeck());
+  const owner = store.createTable("阿童");
+  seatHuman(store, owner.human_token);
+  const agent = store.joinAgent(owner.table.join_code, "小葵");
+  seatAgent(store, agent.agent_token);
+  const friend = store.joinHuman(owner.table.join_code, "小蝶");
+  let view = store.startRound(owner.human_token, tableVersion(store, owner.human_token), "start-sub-01");
+  assert.equal(view.legal_actions.includes("invite_substitute"), true, "a seated player with spectators around may invite one");
+  assert.equal(store.getHumanView(friend.human_token).legal_actions.includes("invite_substitute"), false);
+  view = store.humanAction(owner.human_token, "play_cards", view.version, "sub-owner-play-1", ["♣3"]);
+  const ownerHand = view.hand;
+
+  assert.throws(() => store.humanInviteSubstitute(owner.human_token, agent.table.viewer_seat_id, view.version, "sub-invite-seated"), /只能邀請觀戰區/);
+  view = store.humanInviteSubstitute(owner.human_token, friend.table.viewer_seat_id, view.version, "sub-invite-01");
+  const invited = store.getHumanView(friend.human_token);
+  assert.deepEqual(invited.substitute_invite, { from_seat_id: owner.table.viewer_seat_id, from_name: "阿童" });
+  assert.equal(invited.legal_actions.includes("accept_substitute"), true);
+  assert.throws(() => store.humanAcceptSubstitute(agent.agent_token as string, invited.version, "sub-accept-wrong"), /憑證無效/);
+
+  const accepted = store.humanAcceptSubstitute(friend.human_token, invited.version, "sub-accept-01");
+  assert.equal(accepted.viewer_role, "seated");
+  assert.deepEqual(accepted.hand, ownerHand, "the substitute inherits the hand");
+  assert.equal(accepted.substitute_invite, null);
+  assert.deepEqual(accepted.players.map((seat) => seat.name), ["小蝶", "小葵"]);
+  const ownerAfter = store.getHumanView(owner.human_token);
+  assert.equal(ownerAfter.viewer_role, "spectator");
+  assert.equal(ownerAfter.viewer_is_owner, true, "the table owner keeps owning the table from the spectator area");
+  assert.equal(ownerAfter.hand.length, 0);
+
+  // 小葵 pass 之後輪回小蝶，她把剩下的牌打完，本局分數落在她身上。
+  let turn = store.getAgentView(agent.agent_token);
+  const ranks = ["4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A", "2"];
+  let friendView = store.agentAction(agent.agent_token, "pass", turn.version, "sub-agent-pass-0");
+  friendView = store.getHumanView(friend.human_token);
+  for (let index = 0; index < ranks.length; index += 1) {
+    friendView = store.humanAction(friend.human_token, "play_cards", friendView.version, `sub-friend-card-${index}`, [`♣${ranks[index]}`]);
+    if (friendView.phase === "ended") break;
+    turn = store.getAgentView(agent.agent_token);
+    store.agentAction(agent.agent_token, "pass", turn.version, `sub-agent-pass-${index + 1}`);
+    friendView = store.getHumanView(friend.human_token);
+  }
+  assert.equal(friendView.phase, "ended");
+  const winner = friendView.players.find((seat) => seat.name === "小蝶")!;
+  assert.equal(winner.rounds_won, 1);
+  assert.equal(winner.game_score > 0, true, "the substitute who finished the round gets its score");
+  assert.equal(store.getHumanView(owner.human_token).players.some((seat) => seat.name === "阿童"), false);
+  assert.equal(store.listTables()[0]!.players.map((seat) => seat.name).includes("阿童"), false);
+});
+
 test("a human can leave the table; the owner hands over to the next human or closes an empty table", () => {
   const store = new MultiplayerTableStore(() => createDeck());
   const owner = store.createTable("阿童");

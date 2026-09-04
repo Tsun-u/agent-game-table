@@ -77,6 +77,8 @@ export interface PublicTableView {
   readonly pending_seat_ids: string[];
   readonly players: PublicSeatView[];
   readonly spectators: PublicSpectatorView[];
+  /** 有人邀你代打時才有值；接受後你會坐進對方的位置，對方退到觀戰區。 */
+  readonly substitute_invite: { readonly from_seat_id: string; readonly from_name: string } | null;
   /** 你自己的手牌。 */
   readonly hand: string[];
   /** 引擎決定形狀的桌面。 */
@@ -210,6 +212,11 @@ interface ReconnectTicket {
   readonly expiresAtMs: number;
 }
 
+interface SubstituteInvite {
+  readonly fromSeatId: string;
+  readonly expiresAtMs: number;
+}
+
 interface Table {
   readonly id: string;
   readonly joinCode: string;
@@ -230,6 +237,8 @@ interface Table {
   readonly receipts: Map<string, Receipt<unknown>>;
   readonly waiters: Map<string, Waiter>;
   readonly reconnectTickets: Map<string, ReconnectTicket>;
+  /** 鍵是被邀請者的席位 id；邀請不落地，重啟就清掉。 */
+  readonly substituteInvites: Map<string, SubstituteInvite>;
 }
 
 export interface MultiplayerTablePersistence {
@@ -249,6 +258,7 @@ const EVENT_CAP = 500;
 const MAX_WAIT_MS = 100_000;
 const CHAT_CAP = 100;
 const RECONNECT_TICKET_TTL_MS = 10 * 60 * 1000;
+const SUBSTITUTE_INVITE_TTL_MS = 10 * 60 * 1000;
 const LEAVE_RECEIPT_CAP = 1_000;
 
 export class MultiplayerTableStore {
@@ -282,7 +292,7 @@ export class MultiplayerTableStore {
     const table: Table = {
       id, joinCode, ownerSeatId: humanSeat.id, mode: engine.mode, options: engine.normalizeOptions(options), nextSeatIndex: 0, phase: "lobby", version: 1, round: 0,
       game: null, seats: [humanSeat], agentSessions: new Map(), events: [], chat: [],
-      nextEventId: 1, receipts: new Map(), waiters: new Map(), reconnectTickets: new Map(),
+      nextEventId: 1, receipts: new Map(), waiters: new Map(), reconnectTickets: new Map(), substituteInvites: new Map(),
     };
     this.#tables.set(id, table);
     this.#joinCodes.set(joinCode, id);
@@ -559,6 +569,83 @@ export class MultiplayerTableStore {
     return this.#leaveSeat(table, this.#requireSeat(table, session.seatId), expectedVersion, idempotencyKey);
   }
 
+  humanInviteSubstitute(humanToken: string, targetSeatId: string, expectedVersion: number, idempotencyKey: string): PublicTableView {
+    const { table, seat } = this.#tableForHuman(humanToken);
+    return this.#inviteSubstitute(table, seat, targetSeatId, expectedVersion, idempotencyKey);
+  }
+
+  agentInviteSubstitute(agentToken: string, targetSeatId: string, expectedVersion: number, idempotencyKey: string): PublicTableView {
+    const { table, session } = this.#tableForAgent(agentToken);
+    return this.#inviteSubstitute(table, this.#requireSeat(table, session.seatId), targetSeatId, expectedVersion, idempotencyKey);
+  }
+
+  humanAcceptSubstitute(humanToken: string, expectedVersion: number, idempotencyKey: string): PublicTableView {
+    const { table, seat } = this.#tableForHuman(humanToken);
+    return this.#acceptSubstitute(table, seat, expectedVersion, idempotencyKey);
+  }
+
+  agentAcceptSubstitute(agentToken: string, expectedVersion: number, idempotencyKey: string): PublicTableView {
+    const { table, session } = this.#tableForAgent(agentToken);
+    return this.#acceptSubstitute(table, this.#requireSeat(table, session.seatId), expectedVersion, idempotencyKey);
+  }
+
+  /** 座位上的人邀觀戰區的人代打；同一個人同時只有一張有效邀請，新的蓋掉舊的。 */
+  #inviteSubstitute(table: Table, seat: Seat, targetSeatId: string, expectedVersion: number, idempotencyKey: string): PublicTableView {
+    const operation = `invite_substitute:${targetSeatId}`;
+    const replay = this.#replay<PublicTableView>(table, seat.id, idempotencyKey, operation);
+    if (replay) return replay;
+    this.#assertVersion(table, expectedVersion);
+    if (!seat.seated) throw new Error("你不在座位上，沒有位置可以請人代打。");
+    if (table.phase === "game_over") throw new Error("這場已經結束。");
+    const target = this.#requireSeat(table, targetSeatId);
+    if (target.id === seat.id) throw new Error("不能邀請自己代打。");
+    if (target.seated) throw new Error(`${target.name} 已經在座位上，只能邀請觀戰區的人。`);
+    for (const [inviteeId, invite] of table.substituteInvites) if (invite.fromSeatId === seat.id) table.substituteInvites.delete(inviteeId);
+    table.substituteInvites.set(target.id, { fromSeatId: seat.id, expiresAtMs: Date.now() + SUBSTITUTE_INVITE_TTL_MS });
+    table.version += 1;
+    this.#appendEvent(table, "substitute_invited", seat, `${seat.name} 邀請 ${target.name} 代打。`);
+    const result = this.#remember(table, seat.id, idempotencyKey, operation, this.#view(table, seat.id));
+    this.#flushWaiters(table);
+    this.#persist();
+    return result;
+  }
+
+  /** 接手：接手者帶著自己的分數坐進邀請者的位置，邀請者退到觀戰區；局中的手牌與輪次一起轉過去。 */
+  #acceptSubstitute(table: Table, seat: Seat, expectedVersion: number, idempotencyKey: string): PublicTableView {
+    const operation = "accept_substitute";
+    const replay = this.#replay<PublicTableView>(table, seat.id, idempotencyKey, operation);
+    if (replay) return replay;
+    this.#assertVersion(table, expectedVersion);
+    const invite = this.#validSubstituteInvite(table, seat.id);
+    if (!invite) throw new Error("沒有人邀請你代打，或邀請已過期。");
+    if (seat.seated) throw new Error("你已經在座位上。");
+    const from = this.#requireSeat(table, invite.fromSeatId);
+    if (!from.seated) throw new Error(`${from.name} 已經不在座位上了。`);
+    if (table.game !== null) table.game = this.#engine(table).transferSeat(table.game, from.id, seat.id);
+    seat.seated = true;
+    seat.seatIndex = from.seatIndex;
+    from.seated = false;
+    from.seatIndex = null;
+    table.substituteInvites.delete(seat.id);
+    for (const [inviteeId, pending] of table.substituteInvites) if (pending.fromSeatId === from.id) table.substituteInvites.delete(inviteeId);
+    table.version += 1;
+    this.#appendEvent(table, "substitute_accepted", seat, `${seat.name} 接手 ${from.name} 的座位。`);
+    const result = this.#remember(table, seat.id, idempotencyKey, operation, this.#view(table, seat.id));
+    this.#flushWaiters(table);
+    this.#persist();
+    return result;
+  }
+
+  #validSubstituteInvite(table: Table, inviteeSeatId: string): SubstituteInvite | null {
+    const invite = table.substituteInvites.get(inviteeSeatId);
+    if (!invite) return null;
+    if (invite.expiresAtMs <= Date.now() || !table.seats.some((seat) => seat.id === invite.fromSeatId && seat.seated)) {
+      table.substituteInvites.delete(inviteeSeatId);
+      return null;
+    }
+    return invite;
+  }
+
   #takeSeat(table: Table, seat: Seat, expectedVersion: number, idempotencyKey: string): PublicTableView {
     const operation = "take_seat";
     const replay = this.#replay<PublicTableView>(table, seat.id, idempotencyKey, operation);
@@ -592,6 +679,7 @@ export class MultiplayerTableStore {
       const pruned = this.#engine(table).onSeatRemoved(table.game, seat.id, table.options);
       table.game = pruned === "abort" ? null : pruned.state;
     }
+    for (const [inviteeId, invite] of table.substituteInvites) if (invite.fromSeatId === seat.id) table.substituteInvites.delete(inviteeId);
     table.version += 1;
     this.#appendEvent(table, "seat_vacated", seat, `${seat.name} 起身到觀戰區。`);
     const result = this.#remember(table, seat.id, idempotencyKey, operation, this.#view(table, seat.id));
@@ -751,6 +839,7 @@ export class MultiplayerTableStore {
     }
     if (seat.humanTokenHash) this.#humanTokens.delete(seat.humanTokenHash);
     for (const [code, ticket] of table.reconnectTickets) if (ticket.seatId === seat.id) table.reconnectTickets.delete(code);
+    for (const [inviteeId, invite] of table.substituteInvites) if (inviteeId === seat.id || invite.fromSeatId === seat.id) table.substituteInvites.delete(inviteeId);
     if (seat.principalId) this.#principalSeats.delete(principalBindingKey(seat.principalId, seat.name));
     for (const key of table.receipts.keys()) if (key.startsWith(`${seat.id}:`)) table.receipts.delete(key);
     table.seats.splice(seatIndex, 1);
@@ -793,6 +882,10 @@ export class MultiplayerTableStore {
       if (viewer.seated) legalActions.push("leave_seat");
       else if (seated.length < engine.seats.max) legalActions.push("take_seat");
     }
+    const invite = viewer.seated ? null : this.#validSubstituteInvite(table, viewer.id);
+    if (invite) legalActions.push("accept_substitute");
+    if (viewer.seated && table.phase !== "game_over" && table.seats.some((seat) => !seat.seated)) legalActions.push("invite_substitute");
+    const inviter = invite ? this.#requireSeat(table, invite.fromSeatId) : null;
     const legalPlays = viewer.kind === "agent" && viewer.seated && inRound && pending.includes(viewer.id)
       ? engine.legalPlays(state, viewer.id, table.options).map((play) => ({ cards: [...play.cards], hand_type: play.label }))
       : [];
@@ -812,6 +905,7 @@ export class MultiplayerTableStore {
         status: seatStatus[seat.id] ?? "waiting", is_you: seat.id === viewerSeatId,
       })),
       spectators: table.seats.filter((seat) => !seat.seated).map((seat) => ({ seat_id: seat.id, name: seat.name, kind: seat.kind, is_you: seat.id === viewerSeatId })),
+      substitute_invite: inviter ? { from_seat_id: inviter.id, from_name: inviter.name } : null,
       hand, board,
       pile: {
         cards: [...(rawPile.cards ?? [])], hand_type: rawPile.hand_type ?? null,
@@ -991,6 +1085,7 @@ export class MultiplayerTableStore {
         events: structuredClone((saved.events ?? []) as TableEvent[]), chat: structuredClone((saved.chat ?? []) as PublicChatMessage[]),
         nextEventId: Number(saved.nextEventId), receipts: new Map(structuredClone((saved.receipts ?? []) as [string, Receipt<unknown>][])),
         waiters: new Map(), reconnectTickets: new Map(((saved.reconnectTickets ?? []) as [string, ReconnectTicket][]).filter(([, ticket]) => ticket.expiresAtMs > Date.now())),
+        substituteInvites: new Map(),
       };
       this.#tables.set(table.id, table);
       this.#joinCodes.set(table.joinCode, table.id);

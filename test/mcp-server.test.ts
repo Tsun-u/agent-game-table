@@ -20,7 +20,7 @@ test("multiple MCP Agents play Big Two with isolated capabilities and event curs
 
   const tools = await first.listTools();
   assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [
-    "get_game_rules", "get_table_view", "join_table", "leave_seat", "leave_table", "say_at_table", "take_action", "take_seat", "wait_for_table_event",
+    "accept_substitute", "get_game_rules", "get_table_view", "invite_substitute", "join_table", "leave_seat", "leave_table", "say_at_table", "take_action", "take_seat", "wait_for_table_event",
   ]);
   const schemas = JSON.stringify(tools);
   assert.equal(schemas.includes('"deck"'), false);

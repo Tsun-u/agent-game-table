@@ -288,6 +288,14 @@ class PrincipalStoreHost implements AgentGameTableAgentHost {
     return this.#store.agentLeaveSeat(agentToken, expectedVersion, idempotencyKey);
   }
 
+  async inviteSubstitute(agentToken: string, targetSeatId: string, expectedVersion: number, idempotencyKey: string): Promise<PublicTableView> {
+    return this.#store.agentInviteSubstitute(agentToken, targetSeatId, expectedVersion, idempotencyKey);
+  }
+
+  async acceptSubstitute(agentToken: string, expectedVersion: number, idempotencyKey: string): Promise<PublicTableView> {
+    return this.#store.agentAcceptSubstitute(agentToken, expectedVersion, idempotencyKey);
+  }
+
   async waitForEvents(agentToken: string, timeoutMs: number): Promise<AgentEventResult> {
     return this.#store.waitForAgentEvents(agentToken, timeoutMs);
   }

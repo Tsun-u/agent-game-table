@@ -15,6 +15,8 @@ export interface AgentGameTableAgentHost {
   agentSay(agentToken: string, message: string, idempotencyKey: string): Promise<PublicTableView>;
   takeSeat(agentToken: string, expectedVersion: number, idempotencyKey: string): Promise<PublicTableView>;
   leaveSeat(agentToken: string, expectedVersion: number, idempotencyKey: string): Promise<PublicTableView>;
+  inviteSubstitute(agentToken: string, targetSeatId: string, expectedVersion: number, idempotencyKey: string): Promise<PublicTableView>;
+  acceptSubstitute(agentToken: string, expectedVersion: number, idempotencyKey: string): Promise<PublicTableView>;
   /** 有登入身分的 Host 可以在 server 沒有座位 token 時找回座位；STDIO 模式沒有這個能力。 */
   resumeAgent?(): Promise<AgentJoinResult | null>;
   waitForEvents(agentToken: string, timeoutMs: number): Promise<AgentEventResult>;
@@ -82,6 +84,20 @@ export class AgentGameTableHostClient implements AgentGameTableAgentHost {
 
   async leaveSeat(agentToken: string, expectedVersion: number, idempotencyKey: string): Promise<PublicTableView> {
     const result = await this.#request<{ table: PublicTableView }>("/api/agent/unseat", {
+      method: "POST", token: agentToken, body: { expected_version: expectedVersion, idempotency_key: idempotencyKey },
+    });
+    return result.table;
+  }
+
+  async inviteSubstitute(agentToken: string, targetSeatId: string, expectedVersion: number, idempotencyKey: string): Promise<PublicTableView> {
+    const result = await this.#request<{ table: PublicTableView }>("/api/agent/invite-substitute", {
+      method: "POST", token: agentToken, body: { seat_id: targetSeatId, expected_version: expectedVersion, idempotency_key: idempotencyKey },
+    });
+    return result.table;
+  }
+
+  async acceptSubstitute(agentToken: string, expectedVersion: number, idempotencyKey: string): Promise<PublicTableView> {
+    const result = await this.#request<{ table: PublicTableView }>("/api/agent/accept-substitute", {
       method: "POST", token: agentToken, body: { expected_version: expectedVersion, idempotency_key: idempotencyKey },
     });
     return result.table;

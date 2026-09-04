@@ -89,6 +89,8 @@ export interface GameEngine<State = unknown, Options = unknown> {
   apply(state: State, seatId: string, action: SeatAction, options: Options): EngineTransition<State>;
   /** 局中有人離桌：回傳接續後的狀態，或 "abort" 表示本局流局。 */
   onSeatRemoved(state: State, seatId: string, options: Options): EngineTransition<State> | "abort";
+  /** 代打：把 fromSeatId 在局內的一切（手牌、輪到誰、已出的牌）改掛到 toSeatId 名下。 */
+  transferSeat(state: State, fromSeatId: string, toSeatId: string): State;
   view(state: State, viewerSeatId: string | null, options: Options): GameBoardView;
   hand(state: State, seatId: string): readonly string[];
   serialize(state: State): unknown;

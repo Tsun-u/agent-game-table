@@ -131,6 +131,21 @@ export const bigTwoEngine: GameEngine<BigTwoState, BigTwoRuleOptions> = {
     };
   },
 
+  transferSeat(state: BigTwoState, fromSeatId: string, toSeatId: string): BigTwoState {
+    if (!state.order.includes(fromSeatId)) return state;
+    const rekey = (seatId: string | null): string | null => (seatId === fromSeatId ? toSeatId : seatId);
+    const hands: Record<string, readonly string[]> = {};
+    const status: Record<string, BigTwoSeatStatus> = {};
+    for (const seatId of state.order) {
+      hands[rekey(seatId)!] = state.hands[seatId] ?? [];
+      status[rekey(seatId)!] = state.status[seatId] ?? "waiting";
+    }
+    return {
+      ...state, order: state.order.map((seatId) => rekey(seatId)!), hands, status,
+      currentPlaySeatId: rekey(state.currentPlaySeatId), active: rekey(state.active),
+    };
+  },
+
   view(state: BigTwoState, _viewerSeatId: string | null): BigTwoBoard {
     const handCounts: Record<string, number> = {};
     for (const seatId of state.order) handCounts[seatId] = state.hands[seatId]?.length ?? 0;
