@@ -168,7 +168,7 @@ test("an authorized reconnect replaces the old Agent capability", async () => {
   assert.throws(() => store.rejoinAgent(owner.table.join_code, "小葵", ticket.reconnect_code), /無效或已過期/);
 });
 
-test("leaving or removing an Agent revokes its seat without stalling a round", () => {
+test("an Agent leaving mid-round voids the round without changing scores; removal after that just frees the seat", () => {
   const store = new MultiplayerTableStore(() => createDeck());
   const owner = store.createTable("阿童");
   seatHuman(store, owner.human_token);
@@ -182,12 +182,16 @@ test("leaving or removing an Agent revokes its seat without stalling a round", (
   assert.deepEqual(store.leaveAgent(first.agent_token), departure);
   assert.throws(() => store.getAgentView(first.agent_token), /憑證無效/);
   const afterLeave = store.getAgentView(second.agent_token);
-  assert.equal(afterLeave.active_seat_id, second.table.viewer_seat_id);
+  assert.equal(afterLeave.phase, "ended", "leaving mid-round voids the round");
+  assert.equal(afterLeave.active_seat_id, null);
+  assert.deepEqual(afterLeave.pending_seat_ids, []);
+  assert.equal(afterLeave.players.every((seat) => seat.game_score === 0), true, "a voided round scores nothing");
 
   const removed = store.removeAgentSeat(owner.human_token, second.table.viewer_seat_id, afterLeave.version, "remove-agent-01");
   assert.deepEqual(removed.players.map((seat) => seat.name), ["阿童"]);
   assert.equal(removed.phase, "ended");
   assert.throws(() => store.getAgentView(second.agent_token), /憑證無效/);
+  assert.equal(removed.legal_actions.includes("start_round"), true, "the owner can deal again once enough players sit");
 });
 
 test("a complete two-player round scores the winner and starts the next round with that winner", () => {
@@ -237,7 +241,7 @@ function twoPlayerDeck(): Card[] {
   return codes.map((code) => createDeck().find((card) => card.code === code)!);
 }
 
-test("when the opening-card holder leaves before the first play, the lowest remaining card leads instead", () => {
+test("when the opening-card holder leaves before the first play, the round is voided and the owner can redeal", () => {
   const clubThree = createDeck().find((card) => card.code === "♣3")!;
   const others = createDeck().filter((card) => card.code !== "♣3");
   const deck: Card[] = [others[0]!, clubThree, ...others.slice(1)];
@@ -253,11 +257,12 @@ test("when the opening-card holder leaves before the first play, the lowest rema
 
   store.leaveAgent(leaver.agent_token);
   const ownerView = store.getHumanView(owner.human_token);
-  const stayerView = store.getAgentView(stayer.agent_token);
-  const activeView = ownerView.active_seat_id === ownerView.viewer_seat_id ? ownerView : stayerView;
-  assert.equal(activeView.legal_actions.includes("play_cards"), true);
-  assert.equal(activeView.legal_plays.length > 0, true, "the new leader must have a legal opening play");
-  const requiredCard = activeView.legal_plays[0]!.cards.find((code) => activeView.legal_plays.every((play) => play.cards.includes(code)));
-  assert.notEqual(requiredCard, undefined, "every opening play shares the new lowest card");
-  assert.notEqual(requiredCard, "♣3");
+  assert.equal(ownerView.phase, "ended");
+  assert.equal(ownerView.round, 1);
+  assert.equal(ownerView.players.every((seat) => seat.hand_count === 0), true, "hands are discarded after a voided round");
+  assert.equal(store.getAgentView(stayer.agent_token).legal_plays.length, 0);
+  const redeal = store.startRound(owner.human_token, ownerView.version, "start-opening-leave-02");
+  assert.equal(redeal.round, 2);
+  assert.equal(redeal.phase, "in_round");
+  assert.equal(redeal.legal_plays.length === 0 || redeal.legal_plays.every((play) => play.cards.includes("♣3")), true);
 });

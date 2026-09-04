@@ -5,7 +5,8 @@ import { extname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { clientAddress } from "./client-address.js";
-import { MultiplayerTableStore, normalizeRuleOptions, type TurnAction } from "./multiplayer-store.js";
+import { DEFAULT_GAME_MODE, listEngines } from "./engine/registry.js";
+import { MultiplayerTableStore, type TurnAction } from "./multiplayer-store.js";
 
 export interface AgentGameTableHostOptions {
   readonly hostname?: string;
@@ -106,10 +107,20 @@ async function routeRequest(
     sendJson(response, 200, { ok: true, service: "agent-game-table-host", version: "0.1.0" });
     return;
   }
+  if (method === "GET" && url.pathname === "/api/games") {
+    sendJson(response, 200, {
+      default_mode: DEFAULT_GAME_MODE,
+      games: listEngines().map((engine) => ({
+        mode: engine.mode, label: engine.label, rules_version: engine.rulesVersion, seats: engine.seats, options: engine.optionDescriptions,
+      })),
+    });
+    return;
+  }
   if (method === "POST" && url.pathname === "/api/tables") {
     const body = await readJsonBody(request);
     const humanName = requireString(body.human_name, "human_name");
-    sendJson(response, 201, store.createTable(humanName, normalizeRuleOptions(body.options)));
+    const mode = body.mode === undefined ? DEFAULT_GAME_MODE : requireString(body.mode, "mode");
+    sendJson(response, 201, store.createTable(humanName, body.options, mode));
     return;
   }
   if (method === "GET" && url.pathname === "/api/lobby") {

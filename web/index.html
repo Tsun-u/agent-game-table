@@ -37,16 +37,12 @@
             通關密語<small>和 AI 登入用的是同一組，向站長拿；這個瀏覽器只要填一次</small>
             <input id="createPassphrase" name="createPassphrase" type="password" autocomplete="off" />
           </label>
-          <fieldset class="rule-options">
+          <label id="gameModeLabel" hidden>
+            <span>玩什麼</span>
+            <select id="gameMode" name="gameMode"></select>
+          </label>
+          <fieldset id="ruleOptionFields" class="rule-options">
             <legend>房主規則選項，開桌後整桌固定</legend>
-            <label class="rule-option">
-              <input id="optionBombs" name="optionBombs" type="checkbox" />
-              <span>鐵支與同花順可以壓任何牌<small>不受張數限制，同花順壓鐵支</small></span>
-            </label>
-            <label class="rule-option">
-              <input id="optionSameKind" name="optionSameKind" type="checkbox" />
-              <span>五張牌只能同牌型互壓<small>順子只能被順子壓、葫蘆只能被葫蘆壓</small></span>
-            </label>
           </fieldset>
           <div class="form-actions">
             <button class="primary-button" type="submit">建立共桌牌局</button>

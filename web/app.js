@@ -17,6 +17,9 @@
     busy: false,
     remote: false,
     selectedCards: new Set(),
+    /** GET /api/games 的結果：mode → { label, options[] }，開桌表單與規則說明都靠它。 */
+    games: {},
+    defaultMode: "bigtwo",
   };
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   let roundAnimation = null;
@@ -28,7 +31,7 @@
       "seatCount", "roster", "chatLog", "chatForm", "chatInput", "statusLine", "passphraseLabel", "createPassphrase", "adminKeyLabel", "adminKey",
       "managementPanel", "managementList", "managedTableCount", "managementHint", "refreshTables", "backToTables", "leaveTable",
       "lobbyPanel", "lobbyList", "lobbyCount", "lobbyHint",
-      "tableStatus", "roundCelebration", "roundCelebrationAnimation", "roundCelebrationLabel", "optionBombs", "optionSameKind", "ruleOptions", "tableName", "railToggle", "rail", "handDock", "seatButton", "unseatButton", "dockNote", "spectatorList", "spectatorCount",
+      "tableStatus", "roundCelebration", "roundCelebrationAnimation", "roundCelebrationLabel", "gameModeLabel", "gameMode", "ruleOptionFields", "ruleOptions", "tableName", "railToggle", "rail", "handDock", "seatButton", "unseatButton", "dockNote", "spectatorList", "spectatorCount",
     ].map((id) => [id, document.getElementById(id)]),
   );
 
@@ -59,10 +62,10 @@
         method: "POST",
         body: {
           human_name: elements.humanName.value.trim(),
-          options: {
-            bombs_beat_anything: elements.optionBombs.checked,
-            five_card_same_kind_only: elements.optionSameKind.checked,
-          },
+          mode: elements.gameMode.value || state.defaultMode,
+          options: Object.fromEntries(
+            [...elements.ruleOptionFields.querySelectorAll("input[type=checkbox]")].map((input) => [input.dataset.key, input.checked]),
+          ),
         },
         authenticated: false,
         createPassphrase: true,
@@ -103,7 +106,7 @@
   elements.refreshTables.addEventListener("click", () => void run(loadManagement));
   elements.leaveTable.addEventListener("click", () => {
     const table = state.table;
-    const midRound = table && table.phase === "player_turns" && table.viewer_role === "seated";
+    const midRound = table && table.phase === "in_round" && table.viewer_role === "seated";
     if (midRound && !window.confirm("這局還在打，離桌會讓你的牌作廢。確定要離桌嗎？")) return;
     void run(async () => {
       const result = await api("/api/human/leave", { method: "POST" });
@@ -378,12 +381,49 @@
     }), 800);
   }
 
-  function describeRuleOptions(options) {
-    const enabled = [];
-    if (options?.bombs_beat_anything) enabled.push("鐵支同花順全壓");
-    if (options?.five_card_same_kind_only) enabled.push("五張同牌型互壓");
-    return enabled.length ? `房主選項：${enabled.join("、")}` : "房主選項：台灣標準（五張只能被五張壓、葫蘆可壓順子）";
+  const DEFAULT_RULE_TEXT = { bigtwo: "台灣標準（五張只能被五張壓、葫蘆可壓順子）" };
+
+  function describeRuleOptions(table) {
+    const game = state.games[table.mode];
+    const enabled = (game?.options ?? []).filter((option) => table.rule_options?.[option.key]).map((option) => option.label);
+    return enabled.length ? `房主選項：${enabled.join("、")}` : `房主選項：${DEFAULT_RULE_TEXT[table.mode] || "預設規則"}`;
   }
+
+  async function loadGames() {
+    const result = await api("/api/games", { method: "GET", authenticated: false });
+    state.defaultMode = result.default_mode;
+    state.games = Object.fromEntries(result.games.map((game) => [game.mode, game]));
+    elements.gameMode.replaceChildren(...result.games.map((game) => {
+      const option = document.createElement("option");
+      option.value = game.mode;
+      option.textContent = game.label;
+      return option;
+    }));
+    elements.gameMode.value = result.default_mode;
+    elements.gameModeLabel.hidden = result.games.length < 2;
+    renderRuleOptions(result.default_mode);
+  }
+
+  function renderRuleOptions(mode) {
+    const game = state.games[mode];
+    const legend = elements.ruleOptionFields.querySelector("legend");
+    elements.ruleOptionFields.replaceChildren(legend, ...(game?.options ?? []).map((option) => {
+      const label = document.createElement("label");
+      label.className = "rule-option";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.dataset.key = option.key;
+      input.checked = option.default;
+      const text = document.createElement("span");
+      text.textContent = option.label;
+      const small = document.createElement("small");
+      small.textContent = option.description;
+      text.append(small);
+      label.append(input, text);
+      return label;
+    }));
+  }
+  elements.gameMode.addEventListener("change", () => renderRuleOptions(elements.gameMode.value));
 
   function setTable(table) {
     const previousTable = state.table;
@@ -403,7 +443,7 @@
     elements.connectionBadge.classList.add("online");
     elements.joinCode.textContent = table.join_code;
     elements.tableName.textContent = `${table.owner_name}的牌桌`;
-    elements.ruleOptions.textContent = describeRuleOptions(table.rule_options);
+    elements.ruleOptions.textContent = describeRuleOptions(table);
     elements.roundLabel.textContent = table.round ? `第 ${table.round} 局 · ${table.rule_label}` : `${table.rule_label} · 等待開局`;
     elements.seatCount.textContent = String(table.players.length);
 
@@ -432,14 +472,14 @@
     elements.seatButton.disabled = state.busy;
     elements.unseatButton.disabled = state.busy;
     elements.dockNote.hidden = !spectating;
-    elements.dockNote.textContent = table.phase === "player_turns"
+    elements.dockNote.textContent = table.phase === "in_round"
       ? "你在觀戰區看這一局。等這局結束就可以入座。"
       : table.players.length >= 4
         ? "你在觀戰區。四個座位都滿了，等有人起身再入座。"
         : "你在觀戰區。按「入座」加入下一局。";
     elements.startRound.hidden = !table.legal_actions.includes("start_round");
-    elements.playCards.hidden = table.phase !== "player_turns";
-    elements.pass.hidden = table.phase !== "player_turns";
+    elements.playCards.hidden = table.phase !== "in_round";
+    elements.pass.hidden = table.phase !== "in_round";
     elements.playCards.disabled = state.busy || !table.legal_actions.includes("play_cards") || state.selectedCards.size === 0;
     elements.pass.disabled = state.busy || !table.legal_actions.includes("pass");
     elements.selectedCount.textContent = String(state.selectedCards.size);
@@ -558,7 +598,7 @@
       }
       const result = document.createElement("p");
       result.className = "seat-result";
-      result.textContent = resultText(seat, table.phase);
+      result.textContent = resultText(seat, table);
       article.append(heading, cards, result);
       return article;
     });
@@ -692,7 +732,9 @@
     return card;
   }
 
-  function resultText(seat, phase) {
+  function resultText(seat, table) {
+    const phase = table.phase;
+    if (phase === "ended" && table.board.phase === "idle") return "本局流局";
     if (phase === "ended") return seat.hand_count === 0 ? "本局勝出" : `剩下 ${seat.hand_count} 張`;
     return ({ active: "正在行動", waiting: "等待回合", passed: "本墩已 PASS", finished: "已出完手牌" })[seat.status] || "";
   }
@@ -714,7 +756,9 @@
   function playRoundCelebration(table) {
     if (reducedMotion.matches || !window.lottie) return;
     const you = table.players.find((seat) => seat.is_you);
-    elements.roundCelebrationLabel.textContent = you?.hand_count === 0 ? "漂亮，這局是你的！" : "本局結束，再接再厲";
+    elements.roundCelebrationLabel.textContent = table.board.phase === "idle"
+      ? "本局流局，重新來過"
+      : you?.hand_count === 0 ? "漂亮，這局是你的！" : "本局結束，再接再厲";
     clearTimeout(celebrationTimer);
     elements.roundCelebration.hidden = false;
     requestAnimationFrame(() => elements.roundCelebration.classList.add("is-visible"));
@@ -795,6 +839,7 @@
     setStatus("原本的牌桌已不存在，請重新開桌。", true);
   }
 
+  void loadGames().catch((error) => setStatus(error.message, true));
   fetch("/api/remote-config", { headers: { Accept: "application/json" } })
     .then((response) => (response.ok ? response.json() : null))
     .then((config) => {

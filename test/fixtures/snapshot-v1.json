@@ -1,0 +1,709 @@
+{
+  "format": "agent-game-table-big-two-store",
+  "version": 1,
+  "tables": [
+    {
+      "id": "8652c166-22b0-4aa7-b70c-682ee241482a",
+      "joinCode": "FVIGQ2A",
+      "ownerSeatId": "f92fd820-706a-4173-9086-022992d778cb",
+      "options": {
+        "bombs_beat_anything": true,
+        "five_card_same_kind_only": false
+      },
+      "nextSeatIndex": 3,
+      "phase": "player_turns",
+      "version": 9,
+      "round": 1,
+      "deck": [],
+      "activeSeatId": "7623dc75-54eb-442b-a259-a34cabc91292",
+      "currentPlay": {
+        "cards": [
+          "♣3"
+        ],
+        "kind": "single",
+        "score": [
+          0
+        ]
+      },
+      "currentPlaySeatId": "f92fd820-706a-4173-9086-022992d778cb",
+      "passedSeatIds": [],
+      "openingRequiredCard": null,
+      "setAsideCards": [
+        "♠2"
+      ],
+      "seats": [
+        {
+          "id": "f92fd820-706a-4173-9086-022992d778cb",
+          "kind": "human",
+          "name": "阿童",
+          "cards": [
+            "♠3",
+            "♥4",
+            "♦5",
+            "♣6",
+            "♠6",
+            "♥7",
+            "♦8",
+            "♣9",
+            "♠9",
+            "♥10",
+            "♦J",
+            "♣Q",
+            "♠Q",
+            "♥K",
+            "♦A",
+            "♣2"
+          ],
+          "seated": true,
+          "seatIndex": 0,
+          "status": "waiting",
+          "gameScore": 0,
+          "roundsWon": 0,
+          "humanTokenHash": "79855c3f5bf9ee892489fd95b0919522ee00d4b42ab9afd70d7adf98b4c5c2df",
+          "principalId": null,
+          "lastClientId": null
+        },
+        {
+          "id": "7623dc75-54eb-442b-a259-a34cabc91292",
+          "kind": "agent",
+          "name": "小光",
+          "cards": [
+            "♦3",
+            "♣4",
+            "♠4",
+            "♥5",
+            "♦6",
+            "♣7",
+            "♠7",
+            "♥8",
+            "♦9",
+            "♣10",
+            "♠10",
+            "♥J",
+            "♦Q",
+            "♣K",
+            "♠K",
+            "♥A",
+            "♦2"
+          ],
+          "seated": true,
+          "seatIndex": 1,
+          "status": "active",
+          "gameScore": 0,
+          "roundsWon": 0,
+          "humanTokenHash": null,
+          "principalId": null,
+          "lastClientId": null
+        },
+        {
+          "id": "42f11040-cd3c-41ae-80a7-597022f0c858",
+          "kind": "agent",
+          "name": "小燈",
+          "cards": [
+            "♥3",
+            "♦4",
+            "♣5",
+            "♠5",
+            "♥6",
+            "♦7",
+            "♣8",
+            "♠8",
+            "♥9",
+            "♦10",
+            "♣J",
+            "♠J",
+            "♥Q",
+            "♦K",
+            "♣A",
+            "♠A",
+            "♥2"
+          ],
+          "seated": true,
+          "seatIndex": 2,
+          "status": "waiting",
+          "gameScore": 0,
+          "roundsWon": 0,
+          "humanTokenHash": null,
+          "principalId": null,
+          "lastClientId": null
+        },
+        {
+          "id": "723f2845-a6ba-4815-be46-19675becab22",
+          "kind": "human",
+          "name": "路人",
+          "cards": [],
+          "seated": false,
+          "seatIndex": null,
+          "status": "waiting",
+          "gameScore": 0,
+          "roundsWon": 0,
+          "humanTokenHash": "d63c660689eee19cbd1f8f2aeecfbe6611bac9ce9178c95b15e0d2f39547cfa0",
+          "principalId": null,
+          "lastClientId": null
+        }
+      ],
+      "agentSessions": [
+        {
+          "tokenHash": "14866f2780d07543cb646394923833f84df9d63f0f6404db5aa2a5f311cdf454",
+          "seatId": "7623dc75-54eb-442b-a259-a34cabc91292",
+          "cursor": 3
+        },
+        {
+          "tokenHash": "ba18a961f3707537870e6cd319e8975a2a0a835a80ffadb7e3b2fb5e0f0e7201",
+          "seatId": "42f11040-cd3c-41ae-80a7-597022f0c858",
+          "cursor": 5
+        }
+      ],
+      "events": [
+        {
+          "event_id": 1,
+          "kind": "table_created",
+          "round": 0,
+          "actor_seat_id": "f92fd820-706a-4173-9086-022992d778cb",
+          "actor_name": "阿童",
+          "text": "阿童 建立了大老二牌桌。",
+          "at": "2026-09-04T08:19:43.835Z"
+        },
+        {
+          "event_id": 2,
+          "kind": "seat_taken",
+          "round": 0,
+          "actor_seat_id": "f92fd820-706a-4173-9086-022992d778cb",
+          "actor_name": "阿童",
+          "text": "阿童 入座。",
+          "at": "2026-09-04T08:19:43.836Z"
+        },
+        {
+          "event_id": 3,
+          "kind": "seat_joined",
+          "round": 0,
+          "actor_seat_id": "7623dc75-54eb-442b-a259-a34cabc91292",
+          "actor_name": "小光",
+          "text": "小光 加入了牌桌，先在觀戰區。",
+          "at": "2026-09-04T08:19:43.837Z"
+        },
+        {
+          "event_id": 4,
+          "kind": "seat_taken",
+          "round": 0,
+          "actor_seat_id": "7623dc75-54eb-442b-a259-a34cabc91292",
+          "actor_name": "小光",
+          "text": "小光 入座。",
+          "at": "2026-09-04T08:19:43.837Z"
+        },
+        {
+          "event_id": 5,
+          "kind": "seat_joined",
+          "round": 0,
+          "actor_seat_id": "42f11040-cd3c-41ae-80a7-597022f0c858",
+          "actor_name": "小燈",
+          "text": "小燈 加入了牌桌，先在觀戰區。",
+          "at": "2026-09-04T08:19:43.837Z"
+        },
+        {
+          "event_id": 6,
+          "kind": "seat_taken",
+          "round": 0,
+          "actor_seat_id": "42f11040-cd3c-41ae-80a7-597022f0c858",
+          "actor_name": "小燈",
+          "text": "小燈 入座。",
+          "at": "2026-09-04T08:19:43.837Z"
+        },
+        {
+          "event_id": 7,
+          "kind": "seat_joined",
+          "round": 0,
+          "actor_seat_id": "723f2845-a6ba-4815-be46-19675becab22",
+          "actor_name": "路人",
+          "text": "路人 加入了牌桌，先在觀戰區。",
+          "at": "2026-09-04T08:19:43.838Z"
+        },
+        {
+          "event_id": 8,
+          "kind": "round_started",
+          "round": 1,
+          "actor_seat_id": null,
+          "actor_name": null,
+          "text": "第 1 局開始。",
+          "at": "2026-09-04T08:19:43.838Z"
+        },
+        {
+          "event_id": 9,
+          "kind": "turn_started",
+          "round": 1,
+          "actor_seat_id": "f92fd820-706a-4173-9086-022992d778cb",
+          "actor_name": "阿童",
+          "text": "輪到 阿童；首手必須包含 ♣3。",
+          "at": "2026-09-04T08:19:43.838Z"
+        },
+        {
+          "event_id": 10,
+          "kind": "cards_played",
+          "round": 1,
+          "actor_seat_id": "f92fd820-706a-4173-9086-022992d778cb",
+          "actor_name": "阿童",
+          "text": "阿童 出了 單張：♣3。",
+          "at": "2026-09-04T08:19:43.839Z"
+        },
+        {
+          "event_id": 11,
+          "kind": "turn_started",
+          "round": 1,
+          "actor_seat_id": "7623dc75-54eb-442b-a259-a34cabc91292",
+          "actor_name": "小光",
+          "text": "輪到 小光。",
+          "at": "2026-09-04T08:19:43.839Z"
+        }
+      ],
+      "chat": [],
+      "nextEventId": 12,
+      "receipts": [
+        [
+          "f92fd820-706a-4173-9086-022992d778cb:fx-seat-h",
+          {
+            "operation": "take_seat",
+            "value": {
+              "table_id": "8652c166-22b0-4aa7-b70c-682ee241482a",
+              "join_code": "FVIGQ2A",
+              "mode": "bigtwo",
+              "rule_label": "大老二",
+              "rules_version": "bigtwo-tw-5",
+              "rule_options": {
+                "bombs_beat_anything": true,
+                "five_card_same_kind_only": false
+              },
+              "phase": "lobby",
+              "version": 2,
+              "round": 0,
+              "viewer_seat_id": "f92fd820-706a-4173-9086-022992d778cb",
+              "viewer_role": "seated",
+              "viewer_is_owner": true,
+              "owner_name": "阿童",
+              "active_seat_id": null,
+              "players": [
+                {
+                  "seat_id": "f92fd820-706a-4173-9086-022992d778cb",
+                  "name": "阿童",
+                  "kind": "human",
+                  "cards": [],
+                  "hand_count": 0,
+                  "game_score": 0,
+                  "rounds_won": 0,
+                  "status": "waiting",
+                  "is_you": true
+                }
+              ],
+              "spectators": [],
+              "pile": {
+                "cards": [],
+                "hand_type": null,
+                "played_by_seat_id": null,
+                "played_by_name": null
+              },
+              "set_aside_cards": [],
+              "legal_actions": [
+                "start_round",
+                "leave_seat"
+              ],
+              "legal_plays": [],
+              "recent_chat": [],
+              "last_event_id": 2
+            }
+          }
+        ],
+        [
+          "7623dc75-54eb-442b-a259-a34cabc91292:fx-seat-x",
+          {
+            "operation": "take_seat",
+            "value": {
+              "table_id": "8652c166-22b0-4aa7-b70c-682ee241482a",
+              "join_code": "FVIGQ2A",
+              "mode": "bigtwo",
+              "rule_label": "大老二",
+              "rules_version": "bigtwo-tw-5",
+              "rule_options": {
+                "bombs_beat_anything": true,
+                "five_card_same_kind_only": false
+              },
+              "phase": "lobby",
+              "version": 4,
+              "round": 0,
+              "viewer_seat_id": "7623dc75-54eb-442b-a259-a34cabc91292",
+              "viewer_role": "seated",
+              "viewer_is_owner": false,
+              "owner_name": "阿童",
+              "active_seat_id": null,
+              "players": [
+                {
+                  "seat_id": "f92fd820-706a-4173-9086-022992d778cb",
+                  "name": "阿童",
+                  "kind": "human",
+                  "cards": [],
+                  "hand_count": 0,
+                  "game_score": 0,
+                  "rounds_won": 0,
+                  "status": "waiting",
+                  "is_you": false
+                },
+                {
+                  "seat_id": "7623dc75-54eb-442b-a259-a34cabc91292",
+                  "name": "小光",
+                  "kind": "agent",
+                  "cards": [],
+                  "hand_count": 0,
+                  "game_score": 0,
+                  "rounds_won": 0,
+                  "status": "waiting",
+                  "is_you": true
+                }
+              ],
+              "spectators": [],
+              "pile": {
+                "cards": [],
+                "hand_type": null,
+                "played_by_seat_id": null,
+                "played_by_name": null
+              },
+              "set_aside_cards": [],
+              "legal_actions": [
+                "leave_seat"
+              ],
+              "legal_plays": [],
+              "recent_chat": [],
+              "last_event_id": 4
+            }
+          }
+        ],
+        [
+          "42f11040-cd3c-41ae-80a7-597022f0c858:fx-seat-y",
+          {
+            "operation": "take_seat",
+            "value": {
+              "table_id": "8652c166-22b0-4aa7-b70c-682ee241482a",
+              "join_code": "FVIGQ2A",
+              "mode": "bigtwo",
+              "rule_label": "大老二",
+              "rules_version": "bigtwo-tw-5",
+              "rule_options": {
+                "bombs_beat_anything": true,
+                "five_card_same_kind_only": false
+              },
+              "phase": "lobby",
+              "version": 6,
+              "round": 0,
+              "viewer_seat_id": "42f11040-cd3c-41ae-80a7-597022f0c858",
+              "viewer_role": "seated",
+              "viewer_is_owner": false,
+              "owner_name": "阿童",
+              "active_seat_id": null,
+              "players": [
+                {
+                  "seat_id": "f92fd820-706a-4173-9086-022992d778cb",
+                  "name": "阿童",
+                  "kind": "human",
+                  "cards": [],
+                  "hand_count": 0,
+                  "game_score": 0,
+                  "rounds_won": 0,
+                  "status": "waiting",
+                  "is_you": false
+                },
+                {
+                  "seat_id": "7623dc75-54eb-442b-a259-a34cabc91292",
+                  "name": "小光",
+                  "kind": "agent",
+                  "cards": [],
+                  "hand_count": 0,
+                  "game_score": 0,
+                  "rounds_won": 0,
+                  "status": "waiting",
+                  "is_you": false
+                },
+                {
+                  "seat_id": "42f11040-cd3c-41ae-80a7-597022f0c858",
+                  "name": "小燈",
+                  "kind": "agent",
+                  "cards": [],
+                  "hand_count": 0,
+                  "game_score": 0,
+                  "rounds_won": 0,
+                  "status": "waiting",
+                  "is_you": true
+                }
+              ],
+              "spectators": [],
+              "pile": {
+                "cards": [],
+                "hand_type": null,
+                "played_by_seat_id": null,
+                "played_by_name": null
+              },
+              "set_aside_cards": [],
+              "legal_actions": [
+                "leave_seat"
+              ],
+              "legal_plays": [],
+              "recent_chat": [],
+              "last_event_id": 6
+            }
+          }
+        ],
+        [
+          "f92fd820-706a-4173-9086-022992d778cb:fx-start",
+          {
+            "operation": "start_round",
+            "value": {
+              "table_id": "8652c166-22b0-4aa7-b70c-682ee241482a",
+              "join_code": "FVIGQ2A",
+              "mode": "bigtwo",
+              "rule_label": "大老二",
+              "rules_version": "bigtwo-tw-5",
+              "rule_options": {
+                "bombs_beat_anything": true,
+                "five_card_same_kind_only": false
+              },
+              "phase": "player_turns",
+              "version": 8,
+              "round": 1,
+              "viewer_seat_id": "f92fd820-706a-4173-9086-022992d778cb",
+              "viewer_role": "seated",
+              "viewer_is_owner": true,
+              "owner_name": "阿童",
+              "active_seat_id": "f92fd820-706a-4173-9086-022992d778cb",
+              "players": [
+                {
+                  "seat_id": "f92fd820-706a-4173-9086-022992d778cb",
+                  "name": "阿童",
+                  "kind": "human",
+                  "cards": [
+                    "♣3",
+                    "♠3",
+                    "♥4",
+                    "♦5",
+                    "♣6",
+                    "♠6",
+                    "♥7",
+                    "♦8",
+                    "♣9",
+                    "♠9",
+                    "♥10",
+                    "♦J",
+                    "♣Q",
+                    "♠Q",
+                    "♥K",
+                    "♦A",
+                    "♣2"
+                  ],
+                  "hand_count": 17,
+                  "game_score": 0,
+                  "rounds_won": 0,
+                  "status": "active",
+                  "is_you": true
+                },
+                {
+                  "seat_id": "7623dc75-54eb-442b-a259-a34cabc91292",
+                  "name": "小光",
+                  "kind": "agent",
+                  "cards": [],
+                  "hand_count": 17,
+                  "game_score": 0,
+                  "rounds_won": 0,
+                  "status": "waiting",
+                  "is_you": false
+                },
+                {
+                  "seat_id": "42f11040-cd3c-41ae-80a7-597022f0c858",
+                  "name": "小燈",
+                  "kind": "agent",
+                  "cards": [],
+                  "hand_count": 17,
+                  "game_score": 0,
+                  "rounds_won": 0,
+                  "status": "waiting",
+                  "is_you": false
+                }
+              ],
+              "spectators": [
+                {
+                  "seat_id": "723f2845-a6ba-4815-be46-19675becab22",
+                  "name": "路人",
+                  "kind": "human",
+                  "is_you": false
+                }
+              ],
+              "pile": {
+                "cards": [],
+                "hand_type": null,
+                "played_by_seat_id": null,
+                "played_by_name": null
+              },
+              "set_aside_cards": [
+                "♠2"
+              ],
+              "legal_actions": [
+                "play_cards"
+              ],
+              "legal_plays": [],
+              "recent_chat": [],
+              "last_event_id": 9
+            }
+          }
+        ],
+        [
+          "f92fd820-706a-4173-9086-022992d778cb:fx-play-1",
+          {
+            "operation": "take_action:play_cards:♣3",
+            "value": {
+              "table_id": "8652c166-22b0-4aa7-b70c-682ee241482a",
+              "join_code": "FVIGQ2A",
+              "mode": "bigtwo",
+              "rule_label": "大老二",
+              "rules_version": "bigtwo-tw-5",
+              "rule_options": {
+                "bombs_beat_anything": true,
+                "five_card_same_kind_only": false
+              },
+              "phase": "player_turns",
+              "version": 9,
+              "round": 1,
+              "viewer_seat_id": "f92fd820-706a-4173-9086-022992d778cb",
+              "viewer_role": "seated",
+              "viewer_is_owner": true,
+              "owner_name": "阿童",
+              "active_seat_id": "7623dc75-54eb-442b-a259-a34cabc91292",
+              "players": [
+                {
+                  "seat_id": "f92fd820-706a-4173-9086-022992d778cb",
+                  "name": "阿童",
+                  "kind": "human",
+                  "cards": [
+                    "♠3",
+                    "♥4",
+                    "♦5",
+                    "♣6",
+                    "♠6",
+                    "♥7",
+                    "♦8",
+                    "♣9",
+                    "♠9",
+                    "♥10",
+                    "♦J",
+                    "♣Q",
+                    "♠Q",
+                    "♥K",
+                    "♦A",
+                    "♣2"
+                  ],
+                  "hand_count": 16,
+                  "game_score": 0,
+                  "rounds_won": 0,
+                  "status": "waiting",
+                  "is_you": true
+                },
+                {
+                  "seat_id": "7623dc75-54eb-442b-a259-a34cabc91292",
+                  "name": "小光",
+                  "kind": "agent",
+                  "cards": [],
+                  "hand_count": 17,
+                  "game_score": 0,
+                  "rounds_won": 0,
+                  "status": "active",
+                  "is_you": false
+                },
+                {
+                  "seat_id": "42f11040-cd3c-41ae-80a7-597022f0c858",
+                  "name": "小燈",
+                  "kind": "agent",
+                  "cards": [],
+                  "hand_count": 17,
+                  "game_score": 0,
+                  "rounds_won": 0,
+                  "status": "waiting",
+                  "is_you": false
+                }
+              ],
+              "spectators": [
+                {
+                  "seat_id": "723f2845-a6ba-4815-be46-19675becab22",
+                  "name": "路人",
+                  "kind": "human",
+                  "is_you": false
+                }
+              ],
+              "pile": {
+                "cards": [
+                  "♣3"
+                ],
+                "hand_type": "單張",
+                "played_by_seat_id": "f92fd820-706a-4173-9086-022992d778cb",
+                "played_by_name": "阿童"
+              },
+              "set_aside_cards": [
+                "♠2"
+              ],
+              "legal_actions": [],
+              "legal_plays": [],
+              "recent_chat": [],
+              "last_event_id": 11
+            }
+          }
+        ]
+      ],
+      "reconnectTickets": []
+    },
+    {
+      "id": "de268208-82de-4030-b38f-432ff86a5b9f",
+      "joinCode": "VY6_Z2Q",
+      "ownerSeatId": "4d39ded1-cb55-4985-9f20-f3a1d29ec1fc",
+      "options": {
+        "bombs_beat_anything": false,
+        "five_card_same_kind_only": false
+      },
+      "nextSeatIndex": 0,
+      "phase": "lobby",
+      "version": 1,
+      "round": 0,
+      "deck": [],
+      "activeSeatId": null,
+      "currentPlay": null,
+      "currentPlaySeatId": null,
+      "passedSeatIds": [],
+      "openingRequiredCard": null,
+      "setAsideCards": [],
+      "seats": [
+        {
+          "id": "4d39ded1-cb55-4985-9f20-f3a1d29ec1fc",
+          "kind": "human",
+          "name": "隔壁桌",
+          "cards": [],
+          "seated": false,
+          "seatIndex": null,
+          "status": "waiting",
+          "gameScore": 0,
+          "roundsWon": 0,
+          "humanTokenHash": "e9add1a3ecbf42787cf9f3b397a406061038d322b9df97a2f4298d4fb855b21a",
+          "principalId": null,
+          "lastClientId": null
+        }
+      ],
+      "agentSessions": [],
+      "events": [
+        {
+          "event_id": 1,
+          "kind": "table_created",
+          "round": 0,
+          "actor_seat_id": "4d39ded1-cb55-4985-9f20-f3a1d29ec1fc",
+          "actor_name": "隔壁桌",
+          "text": "隔壁桌 建立了大老二牌桌。",
+          "at": "2026-09-04T08:19:43.840Z"
+        }
+      ],
+      "chat": [],
+      "nextEventId": 2,
+      "receipts": [],
+      "reconnectTickets": []
+    }
+  ],
+  "departedAgentTokens": []
+}

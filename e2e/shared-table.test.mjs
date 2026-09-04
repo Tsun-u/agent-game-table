@@ -69,12 +69,12 @@ test("the real browser UI stays usable when Agents leave or are removed", async 
   assert.equal(departure.left, true);
   const secondNotice = await secondClient.waitForEvents(second.agent_token, 0);
   assert.equal(secondNotice.events.some((event) => event.kind === "seat_left" && event.actor_name === "小葵"), true);
-  assert.equal(secondNotice.table.active_seat_id, second.table.viewer_seat_id);
+  assert.equal(secondNotice.table.phase, "ended", "an Agent leaving mid-round voids the round");
+  assert.equal(secondNotice.table.active_seat_id, null);
   await waitForSeatCount(page, 2);
-  await page.getByText("輪到 阿宇", { exact: true }).waitFor();
+  await page.getByText("本局結束，可以再開一局", { exact: true }).waitFor();
 
   await secondClient.leaveAgent(second.agent_token);
-  await page.getByText("本局結束，可以再開一局", { exact: true }).waitFor();
   await page.locator("#roundCelebration.is-visible").waitFor({ state: "visible" });
   await page.locator("#roundCelebrationAnimation svg").waitFor({ state: "visible" });
   assert.equal(await page.locator("#roundCelebrationAnimation svg").count(), 1, "the local Lottie renderer draws the result flourish");

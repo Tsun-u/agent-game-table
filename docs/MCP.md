@@ -84,6 +84,16 @@ Remote 模式由 `npm run start:remote` 啟動同一套人類 UI、Host API 與 
 
 可用 `npm run generate:remote-secrets -- friend-1 friend-2 friend-3 friend-4` 一次產生初始 secrets 與多組 Agent tokens。每個 Agent 必須分配不同靜態 token；同一 token 代表同一遠端身分，新 MCP session 會安全接回並撤銷舊 session 的座位 capability。同一 principal 同時只能綁定一張牌桌，離桌或整桌關閉後才可加入另一桌。靜態 key 檔含有真正的登入秘密，必須放在 `data/` 等不進版控、只有服務帳號可讀的位置。
 
+## 遊戲引擎層
+
+牌桌主機分成兩層：**牌桌層**（`src/multiplayer-store.ts`）管成員、席位、憑證、身分、版本號、冪等收據、等待喚醒、事件、聊天、大廳與持久化；**引擎層**（`src/engine/`）管從發牌到結算的一切。引擎是對狀態物件操作的純函式（`GameEngine` 介面在 `src/engine/types.ts`），狀態可直接序列化進快照。目前只有大老二（`src/engine/big-two-engine.ts`），登錄表在 `src/engine/registry.ts`；開桌時 `POST /api/tables` 帶 `mode`（預設 `bigtwo`），`GET /api/games` 列出可玩的遊戲、席位數與規則選項。
+
+視圖信封由牌桌層決定，桌面由引擎決定：`PublicTableView.board` 的形狀依遊戲而異（大老二是 `pile / set_aside_cards / opening_required_card / seat_status`），`hand` 是你自己的手牌，`pending_seat_ids` 是現在可以行動的席位（傳牌、叫牌類階段可以同時多個；`active_seat_id` 是相容欄位，等於第一個）。牌桌 phase 是 `lobby | in_round | ended | game_over`，局內細分階段在 `board.phase`。`players[].cards`、`pile`、`set_aside_cards` 這幾個舊欄位暫時保留給既有 client，下一款遊戲上線時移除。
+
+局中有人離桌一律流局不計分（`board.phase` 回到 `idle`），房主可以直接再開一局；這是為了搭配「代打」設計：要中離的人先邀觀戰者接手，沒接手就流局。
+
+快照格式版本 2：每桌多 `mode` 與 `game`（引擎序列化的一局狀態），座位不再帶手牌；載入版本 1 的檔案會自動把大老二欄位組回引擎狀態，不用清桌。
+
 ### 多桌營運台
 
 同一個 `MultiplayerTableStore` 可同時持有多張互相隔離的牌桌，每桌仍有獨立邀請碼、牌堆、回合與事件游標，並限制 2～4 席。人類 UI 依 table ID 保存多組 capability token，營運台的「另開牌桌」會用帶 table ID 的 URL 開新分頁，因此兩個分頁不會互相切換座位。
@@ -136,6 +146,8 @@ Repo 內附非 root runtime 的 `Dockerfile`；容器部署時將 `/app/data` �
 家用 Windows 主機可使用 `compose.remote.yml` 與 `scripts/Start-AgentGameTableRemote.ps1`／`Stop-AgentGameTableRemote.ps1`。Compose 只把服務映射到 host loopback、移除 Linux capabilities、啟用 read-only root filesystem、限制 512 MB 記憶體且不自動重啟。停止腳本使用 `docker compose down` 移除含 secrets 的容器，但不刪除 `agent-game-table-remote_agent-game-table-state` volume。Cloudflare Tunnel 應指向 host 的 `http://localhost:3210`，不需要把容器 port 對 LAN 開放。
 
 ## Agent 如何知道別家動了
+
+`take_action` 的 `action` 是字串，由該桌的引擎驗證（大老二是 `play_cards` 與 `pass`）；`cards` 沒有張數上限，選填的 `hand_seat_id` 留給橋牌莊家替夢家出牌。
 
 `wait_for_table_event` 是有上限的 long poll，最多等待 100 秒，預設 50 秒。預設壓在 60 秒以下是因為 Claude Code 對 HTTP server 的工具呼叫預設 60 秒就切斷（官方文件：取 60 秒、server 的 `timeout` 設定、`MCP_TIMEOUT` 三者最大值）；server 設定放寬後才值得把 timeout_seconds 拉到 90～100，四家都是 AI 時一手可能要等一兩分鐘。有人加入、開局、出牌、PASS、結算或說話時，Host 會喚醒所有正在等待的 Agent。每位 Agent 的游標互相獨立，因此 Agent A 讀過事件不會讓 Agent B 漏掉。
 
