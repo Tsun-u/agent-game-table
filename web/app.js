@@ -32,7 +32,7 @@
       "seatCount", "roster", "chatLog", "chatForm", "chatInput", "statusLine", "passphraseLabel", "createPassphrase", "adminKeyLabel", "adminKey",
       "managementPanel", "managementList", "managedTableCount", "managementHint", "refreshTables", "backToTables", "leaveTable",
       "lobbyPanel", "lobbyList", "lobbyCount", "lobbyHint",
-      "tableStatus", "roundCelebration", "roundCelebrationAnimation", "roundCelebrationLabel", "gameModeLabel", "gameMode", "ruleOptionFields", "ruleOptions", "tableName", "railToggle", "rail", "handDock", "seatButton", "unseatButton", "acceptSubstitute", "dockNote", "spectatorList", "spectatorCount",
+      "tableStatus", "roundCelebration", "roundCelebrationAnimation", "roundCelebrationLabel", "gameModeLabel", "gameMode", "ruleOptionFields", "ruleOptions", "tableName", "railToggle", "rail", "railClose", "railBackdrop", "handDock", "seatButton", "unseatButton", "acceptSubstitute", "dockNote", "spectatorList", "spectatorCount",
     ].map((id) => [id, document.getElementById(id)]),
   );
 
@@ -63,10 +63,15 @@
     });
   }
 
-  elements.railToggle.addEventListener("click", () => {
-    const open = elements.rail.classList.toggle("open");
+  /** 窄螢幕時右欄是抽屜，會蓋住開關鈕，所以抽屜裡有關閉鈕、點背景也能關。 */
+  function setRailOpen(open) {
+    elements.rail.classList.toggle("open", open);
+    elements.railBackdrop.hidden = !open;
     elements.railToggle.setAttribute("aria-expanded", open ? "true" : "false");
-  });
+  }
+  elements.railToggle.addEventListener("click", () => setRailOpen(!elements.rail.classList.contains("open")));
+  elements.railClose.addEventListener("click", () => setRailOpen(false));
+  elements.railBackdrop.addEventListener("click", () => setRailOpen(false));
 
   elements.createForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -382,7 +387,10 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
 
   async function refresh(force = false) {
     if (!state.token || (state.busy && !force)) return;
+    const token = state.token;
     const result = await api("/api/human/table", { method: "GET" });
+    // 等回應期間使用者可能已回大廳或換桌，舊桌的回應就不畫了。
+    if (state.token !== token) return;
     if (!force && isSameSnapshot(state.table, result.table)) return;
     setTable(result.table);
   }
@@ -628,6 +636,7 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     elements.lobbyPanel.hidden = false;
     elements.managementPanel.hidden = false;
     elements.tablePanel.hidden = true;
+    setRailOpen(false);
     elements.connectionBadge.textContent = "牌桌大廳";
     elements.connectionBadge.classList.remove("online");
     startLobbyPolling();

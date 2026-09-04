@@ -125,7 +125,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--blue); outline-
 .invite strong { font-size: 1.15rem; letter-spacing: 0.14em; font-variant-numeric: tabular-nums; }
 .table-bar-actions { display: flex; gap: 8px; }
 .table-bar-actions .ghost-button { padding: 8px 12px; font-size: 0.88rem; white-space: nowrap; }
-.rail-toggle { display: none; }
+.rail-toggle, .rail-close, .rail-backdrop { display: none; }
 
 /* 牌桌：舞台與右欄 */
 .table-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; height: clamp(520px, calc(100vh - 300px), 760px); min-height: 0; }
@@ -327,6 +327,9 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
     visibility: hidden; transform: translateX(100%); transition: transform 0.22s ease-out, visibility 0s linear 0.22s;
   }
   .rail.open { visibility: visible; transform: translateX(0); transition: transform 0.22s ease-out; }
+  .rail-close { display: inline-flex; align-self: flex-end; padding: 7px 12px; }
+  .rail-backdrop { display: block; position: fixed; inset: 0; z-index: 19; background: rgba(16, 24, 40, 0.35); }
+  .rail-backdrop[hidden] { display: none; }
   .rail-section { flex: 0 0 auto; overflow: hidden; }
   .roster { max-height: 32vh; }
   .chat-log { height: min(360px, 45vh); }
