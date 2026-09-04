@@ -178,7 +178,7 @@ export class RemoteMcpGateway {
         if (closed) await closed.server.close();
       },
     });
-    const server = createAgentGameTableMcpServer(new PrincipalStoreHost(this.#store, principal.id));
+    const server = createAgentGameTableMcpServer(new PrincipalStoreHost(this.#store, principal));
     record = { principalId: principal.id, transport, server };
     transport.onclose = () => {
       if (initializedSessionId) this.#sessions.delete(initializedSessionId);
@@ -242,18 +242,20 @@ export class RemoteMcpGateway {
 class PrincipalStoreHost implements AgentGameTableAgentHost {
   readonly #store: MultiplayerTableStore;
   readonly #principalId: string;
+  readonly #clientId: string;
 
-  constructor(store: MultiplayerTableStore, principalId: string) {
+  constructor(store: MultiplayerTableStore, principal: RemotePrincipal) {
     this.#store = store;
-    this.#principalId = principalId;
+    this.#principalId = principal.id;
+    this.#clientId = principal.clientId;
   }
 
   async joinAgent(joinCode: string, agentName: string): Promise<AgentJoinResult> {
-    return this.#store.joinAgentForPrincipal(joinCode, agentName, this.#principalId);
+    return this.#store.joinAgentForPrincipal(joinCode, agentName, this.#principalId, this.#clientId);
   }
 
   async rejoinAgent(joinCode: string, agentName: string, reconnectCode: string): Promise<AgentJoinResult> {
-    return this.#store.rejoinAgentForPrincipal(joinCode, agentName, reconnectCode, this.#principalId);
+    return this.#store.rejoinAgentForPrincipal(joinCode, agentName, reconnectCode, this.#principalId, this.#clientId);
   }
 
   async getAgentView(agentToken: string): Promise<PublicTableView> {
@@ -291,7 +293,7 @@ class PrincipalStoreHost implements AgentGameTableAgentHost {
   }
 
   async resumeAgent(): Promise<AgentJoinResult | null> {
-    return this.#store.resumeAgentForPrincipal(this.#principalId);
+    return this.#store.resumeAgentForPrincipal(this.#principalId, this.#clientId);
   }
 }
 

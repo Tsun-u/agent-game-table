@@ -104,7 +104,7 @@ export class BuiltinOAuthServer implements RemoteAuthenticator {
     const issued = this.#accessTokens.get(hash(token));
     if (!issued || issued.expiresAt <= this.#now()) return null;
     return {
-      id: `member:${issued.email}:${issued.clientId}`,
+      id: `member:${issued.email}`,
       clientId: issued.clientId,
       scopes: [this.requiredScope],
       expiresAt: Math.floor(issued.expiresAt / 1000),

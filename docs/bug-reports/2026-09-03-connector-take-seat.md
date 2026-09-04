@@ -31,3 +31,12 @@
 修法（commit 見 git log）：
 - server 手上沒 token 時，用登入身分向 Host 找回座位並換發 token（`resumeAgentForPrincipal`），不留事件；take_seat、take_action、get_table_view、wait_for_table_event 都不再要求同一個 session。
 - 身分鍵改成 `email + OAuth client_id + agent_name`：同一個人的 claude.ai、ChatGPT、Claude Code 各是不同身分，同一個身分也能用不同名字帶多個 Agent。同身分帶多個 Agent 時新 session 無法判斷是哪一個，要再 join_table 指名。
+
+## 續：Host 重啟後重新登入撞名（2026-09-04）
+
+上面把 client_id 放進身分鍵，隔天就踩到：Host 重啟會清掉記憶體裡的 access token，Claude Code 重新登入時整套 OAuth 重跑、連 dynamic registration 一起重做，拿到新的 client_id。`data/oauth-clients.json` 裡光「Claude」就註冊了七次，claude.ai 也一樣。新身分再 join_table 同一個名字，就變成「牌桌上已經有同名玩家」，只能請房主移除座位（積分歸零）。同理，`reconnect_code` 也會被「這個座位已綁定另一個遠端 MCP 身分」擋下。
+
+修法：
+- 身分改回 `member:<email>`，client_id 留在 token 層。身分鍵是 `email + agent_name`：同一個 email 用不同名字帶多個 Agent（小葵叫小葵、阿宇叫阿宇），同名字一律接回原座並撤銷舊 session，不管是哪個 client、重啟前後都一樣。
+- 同 email 多席時，connector 新 session 沒有 token 要找回座位，用「這個座位上次由哪個 client 換發 token」（座位的 `lastClientId`）縮小範圍；只剩一席就接回，認不出來才要求 join_table 指名。這只是縮小範圍的線索，不會隨便挑一席。
+- 舊快照的 `member:<email>:<client_id>` 載入時自動遷移：前段成為身分、後段成為 lastClientId，重啟後不必清桌。

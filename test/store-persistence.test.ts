@@ -47,6 +47,22 @@ test("encrypted persistence restores the human and principal-bound Agent seats w
   assert.throws(() => restored.resumeAgentForPrincipal("static:xiaokui"), /多個 Agent/);
 });
 
+test("a snapshot written with member:<email>:<client_id> principals is migrated to email-only identities", async (context) => {
+  const directory = await mkdtemp(join(tmpdir(), "agent-game-table-migration-"));
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  const path = join(directory, "tables.enc.json");
+  const stateKey = generateStateKey();
+  const store = new MultiplayerTableStore(() => createDeck(), { persistence: new EncryptedFileTablePersistence(path, stateKey) });
+  const created = store.createTable("阿童");
+  const joined = store.joinAgentForPrincipal(created.table.join_code, "小光", "member:tong@example.com:old-client");
+
+  const restored = new MultiplayerTableStore(() => createDeck(), { persistence: new EncryptedFileTablePersistence(path, stateKey) });
+  const resumed = restored.resumeAgentForPrincipal("member:tong@example.com", "old-client");
+  assert.equal(resumed?.table.viewer_seat_id, joined.table.viewer_seat_id, "the old client_id still resolves the seat after restart");
+  const relogin = restored.joinAgentForPrincipal(created.table.join_code, "小光", "member:tong@example.com", "new-client");
+  assert.equal(relogin.table.viewer_seat_id, joined.table.viewer_seat_id, "a re-login with a fresh client_id reconnects instead of colliding on the name");
+});
+
 test("an encrypted state file rejects the wrong key", async (context) => {
   const directory = await mkdtemp(join(tmpdir(), "agent-game-table-wrong-key-"));
   context.after(() => rm(directory, { recursive: true, force: true }));

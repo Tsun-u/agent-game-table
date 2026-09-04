@@ -182,6 +182,8 @@ interface Seat {
   roundsWon: number;
   humanTokenHash: string | null;
   principalId: string | null;
+  /** 最後一次為這個座位換發 token 的 OAuth client；同一個身分多個 Agent 時用來認出是哪一個。 */
+  lastClientId: string | null;
 }
 
 interface Receipt<T> {
@@ -277,7 +279,7 @@ export class MultiplayerTableStore {
     const humanTokenHash = capabilityHash(humanToken);
     const humanSeat: Seat = {
       id: randomUUID(), kind: "human", name: normalizeName(humanName, "玩家"), cards: [], seated: false, seatIndex: null, status: "waiting",
-      gameScore: 0, roundsWon: 0, humanTokenHash, principalId: null,
+      gameScore: 0, roundsWon: 0, humanTokenHash, principalId: null, lastClientId: null,
     };
     const table: Table = {
       id, joinCode, ownerSeatId: humanSeat.id, options: normalizeRuleOptions(options), nextSeatIndex: 0, phase: "lobby", version: 1, round: 0, deck: [], activeSeatId: null,
@@ -301,7 +303,7 @@ export class MultiplayerTableStore {
     const tokenHash = capabilityHash(token);
     const seat: Seat = {
       id: randomUUID(), kind: "human", name, cards: [], seated: false, seatIndex: null, status: "waiting", gameScore: 0, roundsWon: 0,
-      humanTokenHash: tokenHash, principalId: null,
+      humanTokenHash: tokenHash, principalId: null, lastClientId: null,
     };
     table.seats.push(seat);
     this.#humanTokens.set(tokenHash, { tableId: table.id, seatId: seat.id });
@@ -340,7 +342,7 @@ export class MultiplayerTableStore {
     return this.#joinNewAgent(this.#tableForJoinCode(joinCode), agentName, null);
   }
 
-  joinAgentForPrincipal(joinCode: string, agentName: string, principalId: string): AgentJoinResult {
+  joinAgentForPrincipal(joinCode: string, agentName: string, principalId: string, clientId: string | null = null): AgentJoinResult {
     const principal = normalizePrincipal(principalId);
     const table = this.#tableForJoinCode(joinCode);
     const bindingKey = principalBindingKey(principal, normalizeName(agentName, "AI 玩家"));
@@ -351,35 +353,41 @@ export class MultiplayerTableStore {
       if (!boundTable || !boundSeat || boundSeat.kind !== "agent") this.#principalSeats.delete(bindingKey);
       else {
         if (boundTable.id !== table.id) throw new Error("這個名字的 Agent 已經在另一張牌桌上，請先 leave_table。");
-        return this.#reconnectSeat(table, boundSeat, principal);
+        return this.#reconnectSeat(table, boundSeat, principal, clientId);
       }
     }
-    return this.#joinNewAgent(table, agentName, principal);
+    return this.#joinNewAgent(table, agentName, principal, clientId);
   }
 
   /**
    * 給每次 tool call 都可能換 MCP session 的 client（claude.ai／ChatGPT connector）用：
    * server 手上沒有座位 token 時，用登入身分找回唯一的座位並換發新 token，不留事件。
-   * 同一個身分帶了多個 Agent 時無法判斷是哪一個，要求重新 join_table 指名。
+   * 同一個身分帶了多個 Agent 時，只認得出「上次由同一個 OAuth client 操作」的那一個；
+   * 認不出來就要求重新 join_table 指名。
    */
-  resumeAgentForPrincipal(principalId: string): AgentJoinResult | null {
+  resumeAgentForPrincipal(principalId: string, clientId: string | null = null): AgentJoinResult | null {
     const principal = normalizePrincipal(principalId);
     const prefix = principalBindingKey(principal, "");
-    const bindings = [...this.#principalSeats.entries()].filter(([key]) => key.startsWith(prefix)).map(([, binding]) => binding);
-    if (bindings.length === 0) return null;
-    if (bindings.length > 1) throw new Error("這個登入身分帶了多個 Agent 在桌上，請帶 agent_name 重新呼叫 join_table 指明是哪一個。");
-    const binding = bindings[0]!;
-    const table = this.#tables.get(binding.tableId);
-    const seat = table?.seats.find((candidate) => candidate.id === binding.seatId);
-    if (!table || !seat || seat.kind !== "agent") return null;
-    return this.#issueAgentSession(table, seat, principal);
+    const bound = [...this.#principalSeats.entries()]
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([, binding]) => {
+        const table = this.#tables.get(binding.tableId);
+        const seat = table?.seats.find((candidate) => candidate.id === binding.seatId);
+        return table && seat && seat.kind === "agent" ? { table, seat } : null;
+      })
+      .filter((entry): entry is { table: Table; seat: Seat } => entry !== null);
+    if (bound.length === 0) return null;
+    const candidates = bound.length === 1 ? bound : bound.filter(({ seat }) => clientId !== null && seat.lastClientId === clientId);
+    if (candidates.length !== 1) throw new Error("這個登入身分帶了多個 Agent 在桌上，請帶 agent_name 重新呼叫 join_table 指明是哪一個。");
+    const { table, seat } = candidates[0]!;
+    return this.#issueAgentSession(table, seat, principal, clientId);
   }
 
-  #joinNewAgent(table: Table, agentName: string, principalId: string | null): AgentJoinResult {
+  #joinNewAgent(table: Table, agentName: string, principalId: string | null, clientId: string | null = null): AgentJoinResult {
     this.#assertMemberAvailable(table);
     const seat: Seat = {
       id: randomUUID(), kind: "agent", name: this.#availableName(table, agentName, "AI 玩家"), cards: [], seated: false, seatIndex: null, status: "waiting",
-      gameScore: 0, roundsWon: 0, humanTokenHash: null, principalId,
+      gameScore: 0, roundsWon: 0, humanTokenHash: null, principalId, lastClientId: clientId,
     };
     const token = capabilityToken();
     const tokenHash = capabilityHash(token);
@@ -417,11 +425,11 @@ export class MultiplayerTableStore {
     return this.#rejoinAgent(joinCode, agentName, reconnectCode, null);
   }
 
-  rejoinAgentForPrincipal(joinCode: string, agentName: string, reconnectCode: string, principalId: string): AgentJoinResult {
-    return this.#rejoinAgent(joinCode, agentName, reconnectCode, normalizePrincipal(principalId));
+  rejoinAgentForPrincipal(joinCode: string, agentName: string, reconnectCode: string, principalId: string, clientId: string | null = null): AgentJoinResult {
+    return this.#rejoinAgent(joinCode, agentName, reconnectCode, normalizePrincipal(principalId), clientId);
   }
 
-  #rejoinAgent(joinCode: string, agentName: string, reconnectCode: string, principalId: string | null): AgentJoinResult {
+  #rejoinAgent(joinCode: string, agentName: string, reconnectCode: string, principalId: string | null, clientId: string | null = null): AgentJoinResult {
     const table = this.#tableForJoinCode(joinCode);
     const codeHash = capabilityHash(reconnectCode.trim().toUpperCase());
     const ticket = table.reconnectTickets.get(codeHash);
@@ -437,11 +445,11 @@ export class MultiplayerTableStore {
       if (existing && (existing.tableId !== table.id || existing.seatId !== seat.id)) throw new Error("這個遠端 MCP 身分已經綁定另一個座位。");
     }
     table.reconnectTickets.delete(codeHash);
-    return this.#reconnectSeat(table, seat, principalId);
+    return this.#reconnectSeat(table, seat, principalId, clientId);
   }
 
-  #reconnectSeat(table: Table, seat: Seat, principalId: string | null): AgentJoinResult {
-    const result = this.#issueAgentSession(table, seat, principalId);
+  #reconnectSeat(table: Table, seat: Seat, principalId: string | null, clientId: string | null = null): AgentJoinResult {
+    const result = this.#issueAgentSession(table, seat, principalId, clientId);
     this.#appendEvent(table, "seat_reconnected", seat, `${seat.name} 已安全接回原座位。`);
     this.#flushWaiters(table);
     this.#persist();
@@ -449,7 +457,7 @@ export class MultiplayerTableStore {
   }
 
   /** 撤銷這個座位既有的 session、換發新 token；不寫事件，讓 reconnect 與靜默 resume 共用。 */
-  #issueAgentSession(table: Table, seat: Seat, principalId: string | null): AgentJoinResult {
+  #issueAgentSession(table: Table, seat: Seat, principalId: string | null, clientId: string | null = null): AgentJoinResult {
     for (const [tokenHash, session] of table.agentSessions) {
       if (session.seatId !== seat.id) continue;
       const waiter = table.waiters.get(tokenHash);
@@ -465,6 +473,7 @@ export class MultiplayerTableStore {
     const tokenHash = capabilityHash(token);
     const session: AgentSession = { tokenHash, seatId: seat.id, cursor: table.nextEventId - 1 };
     seat.principalId = principalId;
+    seat.lastClientId = clientId;
     table.agentSessions.set(tokenHash, session);
     this.#agentTokens.set(tokenHash, table.id);
     if (principalId) this.#principalSeats.set(principalBindingKey(principalId, seat.name), { tableId: table.id, seatId: seat.id });
@@ -1017,7 +1026,7 @@ export class MultiplayerTableStore {
         setAsideCards: table.setAsideCards.map((card) => card.code),
         seats: table.seats.map((seat) => ({
           id: seat.id, kind: seat.kind, name: seat.name, cards: seat.cards.map((card) => card.code), seated: seat.seated, seatIndex: seat.seatIndex, status: seat.status,
-          gameScore: seat.gameScore, roundsWon: seat.roundsWon, humanTokenHash: seat.humanTokenHash, principalId: seat.principalId,
+          gameScore: seat.gameScore, roundsWon: seat.roundsWon, humanTokenHash: seat.humanTokenHash, principalId: seat.principalId, lastClientId: seat.lastClientId,
         })),
         agentSessions: [...table.agentSessions.values()].map((session) => ({ ...session })), events: table.events, chat: table.chat,
         nextEventId: table.nextEventId, receipts: [...table.receipts.entries()], reconnectTickets: [...table.reconnectTickets.entries()],
@@ -1040,7 +1049,7 @@ export class MultiplayerTableStore {
         seatIndex: typeof seat.seatIndex === "number" ? seat.seatIndex : typeof seat.seated === "boolean" && !seat.seated ? null : index,
         status: seat.status as SeatStatus, gameScore: Number(seat.gameScore ?? 0), roundsWon: Number(seat.roundsWon ?? 0),
         humanTokenHash: typeof seat.humanTokenHash === "string" ? seat.humanTokenHash : null,
-        principalId: typeof seat.principalId === "string" ? seat.principalId : null,
+        ...restoreSeatIdentity(seat.principalId, seat.lastClientId),
       }));
       if (!seats.some((seat) => seat.id === saved.ownerSeatId && seat.kind === "human")) throw new Error("Agent Game Table 開桌者資料無效。");
       const play = saved.currentPlay as { cards?: string[]; kind?: BigTwoPlay["kind"]; score?: number[] } | null;
@@ -1086,6 +1095,18 @@ function capabilityHash(token: string): string {
 
 function principalBindingKey(principalId: string, seatName: string): string {
   return `${principalId}\u0000${seatName}`;
+}
+
+/**
+ * 舊快照的會員身分是 `member:<email>:<client_id>`；client_id 每次重新登入都會換，
+ * 所以身分只留 email，client_id 降級成座位的 lastClientId。
+ */
+function restoreSeatIdentity(principalId: unknown, lastClientId: unknown): Pick<Seat, "principalId" | "lastClientId"> {
+  const savedClientId = typeof lastClientId === "string" ? lastClientId : null;
+  if (typeof principalId !== "string") return { principalId: null, lastClientId: savedClientId };
+  const legacy = principalId.match(/^(member:[^:]+):(.+)$/);
+  if (!legacy) return { principalId, lastClientId: savedClientId };
+  return { principalId: legacy[1]!, lastClientId: savedClientId ?? legacy[2]! };
 }
 
 function normalizePrincipal(value: string): string {

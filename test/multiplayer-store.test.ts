@@ -41,6 +41,22 @@ test("everyone enters as a spectator, at most 4 sit, and seats only change betwe
   assert.equal(late.table.players.every((seat) => seat.cards.length === 0), true, "spectators never see a hand");
 });
 
+test("one email is one identity: a re-login with a new client_id reconnects the same named Agent", () => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  const created = store.createTable("阿童");
+  const first = store.joinAgentForPrincipal(created.table.join_code, "小光", "member:tong@example.com", "client-before-restart");
+  const second = store.joinAgentForPrincipal(created.table.join_code, "小光", "member:tong@example.com", "client-after-restart");
+  assert.equal(second.table.viewer_seat_id, first.table.viewer_seat_id);
+  assert.throws(() => store.getAgentView(first.agent_token), /憑證無效/, "the older session is revoked");
+
+  const other = store.joinAgentForPrincipal(created.table.join_code, "小燈", "member:tong@example.com", "claude-ai-client");
+  assert.notEqual(other.table.viewer_seat_id, first.table.viewer_seat_id, "a different agent_name under the same email is a second Agent");
+  assert.equal(store.resumeAgentForPrincipal("member:tong@example.com", "claude-ai-client")?.table.viewer_seat_id, other.table.viewer_seat_id);
+  assert.equal(store.resumeAgentForPrincipal("member:tong@example.com", "client-after-restart")?.table.viewer_seat_id, first.table.viewer_seat_id);
+  assert.throws(() => store.resumeAgentForPrincipal("member:tong@example.com", "unknown-client"), /多個 Agent/);
+  assert.throws(() => store.resumeAgentForPrincipal("member:tong@example.com"), /多個 Agent/);
+});
+
 test("a human can leave the table; the owner hands over to the next human or closes an empty table", () => {
   const store = new MultiplayerTableStore(() => createDeck());
   const owner = store.createTable("阿童");
