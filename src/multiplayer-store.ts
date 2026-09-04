@@ -588,6 +588,10 @@ export class MultiplayerTableStore {
     if (!seat.seated) throw new Error("你已經在觀戰區。");
     seat.seated = false;
     seat.seatIndex = null;
+    if (table.game !== null) {
+      const pruned = this.#engine(table).onSeatRemoved(table.game, seat.id, table.options);
+      table.game = pruned === "abort" ? null : pruned.state;
+    }
     table.version += 1;
     this.#appendEvent(table, "seat_vacated", seat, `${seat.name} 起身到觀戰區。`);
     const result = this.#remember(table, seat.id, idempotencyKey, operation, this.#view(table, seat.id));
@@ -696,7 +700,7 @@ export class MultiplayerTableStore {
       const winner = result.winnerSeatId ? table.seats.find((seat) => seat.id === result.winnerSeatId) ?? null : null;
       if (winner) winner.roundsWon += 1;
       table.phase = result.gameOver ? "game_over" : "ended";
-      this.#appendEvent(table, "round_ended", winner, winner ? `${winner.name} ${result.text.replace(/^，/, "")}第 ${table.round} 局。` : result.text);
+      this.#appendEvent(table, "round_ended", winner, fillEventText(result.text, winner?.name ?? null, table.round));
       return;
     }
     // 沒有結果卻沒人可以行動：本局無結果地結束（例如玩家不足）。
@@ -705,7 +709,7 @@ export class MultiplayerTableStore {
 
   #appendEngineEvent(table: Table, event: EngineEvent): void {
     const seat = event.seatId ? table.seats.find((candidate) => candidate.id === event.seatId) ?? null : null;
-    this.#appendEvent(table, event.kind, seat, seat ? `${seat.name} ${event.text}` : event.text);
+    this.#appendEvent(table, event.kind, seat, fillEventText(event.text, seat?.name ?? null, table.round));
   }
 
   #say(table: Table, seat: Seat, text: string, idempotencyKey: string): PublicTableView {
@@ -1082,6 +1086,10 @@ function normalizePrincipal(value: string): string {
 /** 大老二規則選項的正規化；保留給 HTTP 層與測試沿用，實作在引擎裡。 */
 export function normalizeRuleOptions(value: unknown): BigTwoRuleOptions {
   return bigTwoEngine.normalizeOptions(value);
+}
+
+function fillEventText(text: string, name: string | null, round: number): string {
+  return text.replaceAll("{name}", name ?? "").replaceAll("{round}", String(round)).replace(/^\s+/, "");
 }
 
 function chineseCount(value: number): string {

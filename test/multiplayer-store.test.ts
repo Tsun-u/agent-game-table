@@ -194,7 +194,7 @@ test("an Agent leaving mid-round voids the round without changing scores; remova
   assert.equal(removed.legal_actions.includes("start_round"), true, "the owner can deal again once enough players sit");
 });
 
-test("a complete two-player round scores the winner and starts the next round with that winner", () => {
+test("a complete two-player round scores the winner and starts the next round with that winner", async () => {
   const store = new MultiplayerTableStore(() => twoPlayerDeck());
   const owner = store.createTable("阿童");
   seatHuman(store, owner.human_token);
@@ -209,6 +209,11 @@ test("a complete two-player round scores the winner and starts the next round wi
     view = store.agentAction(agent.agent_token, "pass", agentView.version, `agent-pass-${index}`);
   }
   assert.equal(view.phase, "ended");
+  const heard = await store.waitForAgentEvents(agent.agent_token, 0);
+  const texts = heard.events.map((event) => event.text);
+  assert.equal(texts.some((text) => text === "阿童 出完手牌，贏得第 1 局。"), true, "engine events are worded with the actor's name, never as 你");
+  assert.equal(texts.some((text) => text.startsWith("輪到 阿童")), true);
+  assert.equal(texts.some((text) => text.includes("輪到你")), false);
   const winner = view.players.find((seat) => seat.is_you)!;
   assert.equal(winner.hand_count, 0);
   assert.equal(winner.rounds_won, 1);

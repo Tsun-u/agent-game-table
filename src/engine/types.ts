@@ -25,9 +25,11 @@ export interface RoundResult {
   readonly scoreDelta: Readonly<Record<string, number>>;
   /** 整場結束（例如拱豬有人到 -1000）；大老二永遠 false。 */
   readonly gameOver: boolean;
+  /** 局結束的公告，同樣支援 {name}（贏家）與 {round}。 */
   readonly text: string;
 }
 
+/** 事件文字裡的 {name} 由牌桌層換成該席位的名字、{round} 換成局數；沒有席位時 {name} 會被拿掉。 */
 export interface EngineEvent {
   readonly kind: string;
   readonly seatId: string | null;

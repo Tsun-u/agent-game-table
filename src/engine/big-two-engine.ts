@@ -182,7 +182,7 @@ export function bigTwoStake(remaining: readonly string[]): number {
 function applyPass(state: BigTwoState, seatId: string): EngineTransition<BigTwoState> {
   if (!state.currentPlay || state.currentPlaySeatId === seatId) throw new Error("目前由你領出新墩，不能 pass。");
   const next: BigTwoState = { ...state, status: { ...state.status, [seatId]: "passed" } };
-  const passed: EngineEvent = { kind: "player_passed", seatId, text: "pass。" };
+  const passed: EngineEvent = { kind: "player_passed", seatId, text: "{name} pass。" };
   const advanced = advance(next, state.order.indexOf(seatId), state.order);
   return { ...advanced, events: [passed, ...advanced.events] };
 }
@@ -198,7 +198,7 @@ function applyPlay(state: BigTwoState, seatId: string, cardCodes: readonly strin
   if (current && !bigTwoPlayBeats(play, current, options)) throw new Error(`這手 ${bigTwoHandLabel(play.kind)} 沒有大過桌面上的 ${bigTwoHandLabel(current.kind)}。`);
   const remaining = hand.filter((code) => !cardCodes.includes(code));
   const finished = remaining.length === 0;
-  const played: EngineEvent = { kind: "cards_played", seatId, text: `出了 ${bigTwoHandLabel(play.kind)}：${play.cards.map((card) => card.code).join(" ")}。` };
+  const played: EngineEvent = { kind: "cards_played", seatId, text: `{name} 出了 ${bigTwoHandLabel(play.kind)}：${play.cards.map((card) => card.code).join(" ")}。` };
   const next: BigTwoState = {
     ...state, phase: "trick",
     hands: { ...state.hands, [seatId]: remaining },
@@ -225,10 +225,10 @@ function advance(state: BigTwoState, currentIndex: number, order: readonly strin
   let result = state;
   if (state.currentPlaySeatId === next) {
     result = clearPasses({ ...result, currentPlay: null, currentPlaySeatId: null });
-    events.push({ kind: "trick_started", seatId: next, text: "收下這墩，重新領牌。" });
+    events.push({ kind: "trick_started", seatId: next, text: "{name} 收下這墩，重新領牌。" });
   }
   result = { ...result, status: { ...result.status, [next]: "active" }, active: next };
-  events.push({ kind: "turn_started", seatId: next, text: "輪到你了。" });
+  events.push({ kind: "turn_started", seatId: next, text: "輪到 {name}。" });
   return { state: result, events, result: null };
 }
 
@@ -253,12 +253,12 @@ function settle(state: BigTwoState, winner: string, played: EngineEvent): Engine
   return {
     state: { ...state, phase: "ended", status, active: null },
     events: [played],
-    result: { winnerSeatId: winner, scoreDelta, gameOver: false, text: "出完手牌，贏得本局。" },
+    result: { winnerSeatId: winner, scoreDelta, gameOver: false, text: "{name} 出完手牌，贏得第 {round} 局。" },
   };
 }
 
 function turnStarted(seatId: string, openingCard: string): EngineEvent {
-  return { kind: "turn_started", seatId, text: `首手必須包含 ${openingCard}。` };
+  return { kind: "turn_started", seatId, text: `輪到 {name}；首手必須包含 ${openingCard}。` };
 }
 
 function draw(deck: Card[]): Card {
