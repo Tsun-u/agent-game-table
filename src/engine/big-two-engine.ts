@@ -47,8 +47,8 @@ export const bigTwoEngine: GameEngine<BigTwoState, BigTwoRuleOptions> = {
   rulesVersion: BIG_TWO_RULES_VERSION,
   seats: { min: MIN_SEATS, max: MAX_SEATS, fixed: false },
   optionDescriptions: [
-    { key: "bombs_beat_anything", label: "鐵支同花順全壓", description: "鐵支與同花順可以壓任何非鐵支／同花順的牌組，不受張數限制。", default: false },
-    { key: "five_card_same_kind_only", label: "五張同牌型互壓", description: "順子只能被順子壓、葫蘆只能被葫蘆壓；關閉時高階牌型可壓低階牌型。", default: false },
+    { key: "bombs_beat_anything", type: "boolean", label: "鐵支同花順全壓", description: "鐵支與同花順可以壓任何非鐵支／同花順的牌組，不受張數限制。", default: false },
+    { key: "five_card_same_kind_only", type: "boolean", label: "五張同牌型互壓", description: "順子只能被順子壓、葫蘆只能被葫蘆壓；關閉時高階牌型可壓低階牌型。", default: false },
   ],
 
   normalizeOptions(value: unknown): BigTwoRuleOptions {
@@ -129,6 +129,10 @@ export const bigTwoEngine: GameEngine<BigTwoState, BigTwoRuleOptions> = {
       state: { ...state, order: state.order.filter((candidate) => candidate !== seatId), hands: omit(state.hands, seatId), status: omit(state.status, seatId) },
       events: [], result: null,
     };
+  },
+
+  isGameOver(): boolean {
+    return false;
   },
 
   transferSeat(state: BigTwoState, fromSeatId: string, toSeatId: string): BigTwoState {

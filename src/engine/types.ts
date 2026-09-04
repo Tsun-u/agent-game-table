@@ -42,11 +42,16 @@ export interface EngineTransition<State> {
   readonly result: RoundResult | null;
 }
 
-export interface OptionDescription {
-  readonly key: string;
-  readonly label: string;
-  readonly description: string;
-  readonly default: boolean;
+/** 開桌表單的一個規則選項；布林是開關，數字可自填，choice 是下拉。 */
+export type OptionDescription =
+  | { readonly key: string; readonly type: "boolean"; readonly label: string; readonly description: string; readonly default: boolean }
+  | { readonly key: string; readonly type: "number"; readonly label: string; readonly description: string; readonly default: number; readonly min?: number; readonly max?: number }
+  | { readonly key: string; readonly type: "choice"; readonly label: string; readonly description: string; readonly default: string; readonly choices: readonly { readonly value: string; readonly label: string }[] };
+
+export interface GameSummary {
+  readonly round: number;
+  /** 入座席位的累積分；累積分在牌桌層、跟人走，引擎不持有。 */
+  readonly scores: Readonly<Record<string, number>>;
 }
 
 /** 各引擎的規則物件只保證這兩個欄位，其餘欄位由引擎自訂。 */
@@ -91,6 +96,8 @@ export interface GameEngine<State = unknown, Options = unknown> {
   onSeatRemoved(state: State, seatId: string, options: Options): EngineTransition<State> | "abort";
   /** 代打：把 fromSeatId 在局內的一切（手牌、輪到誰、已出的牌）改掛到 toSeatId 名下。 */
   transferSeat(state: State, fromSeatId: string, toSeatId: string): State;
+  /** 一局結算後，依累積分與局數判斷整場是否結束（例如拱豬 -1000 或打滿 N 局）；大老二永遠 false。 */
+  isGameOver(options: Options, summary: GameSummary): boolean;
   view(state: State, viewerSeatId: string | null, options: Options): GameBoardView;
   hand(state: State, seatId: string): readonly string[];
   serialize(state: State): unknown;

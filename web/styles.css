@@ -358,3 +358,6 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
   .round-celebration { display: none !important; }
 }
+
+.rule-option-number, .rule-option-choice { display: grid; grid-template-columns: minmax(0, 1fr) 120px; align-items: center; gap: 10px; }
+.rule-option-number input, .rule-option-choice select { min-width: 0; padding: 6px 8px; }

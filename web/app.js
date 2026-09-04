@@ -76,7 +76,10 @@
           human_name: elements.humanName.value.trim(),
           mode: elements.gameMode.value || state.defaultMode,
           options: Object.fromEntries(
-            [...elements.ruleOptionFields.querySelectorAll("input[type=checkbox]")].map((input) => [input.dataset.key, input.checked]),
+            [...elements.ruleOptionFields.querySelectorAll("[data-key]")].map((field) => [
+              field.dataset.key,
+              field.type === "checkbox" ? field.checked : field.type === "number" ? Number(field.value) : field.value,
+            ]),
           ),
         },
         authenticated: false,
@@ -421,19 +424,43 @@
     const legend = elements.ruleOptionFields.querySelector("legend");
     elements.ruleOptionFields.replaceChildren(legend, ...(game?.options ?? []).map((option) => {
       const label = document.createElement("label");
-      label.className = "rule-option";
-      const input = document.createElement("input");
-      input.type = "checkbox";
-      input.dataset.key = option.key;
-      input.checked = option.default;
+      label.className = `rule-option rule-option-${option.type}`;
+      const field = ruleOptionField(option);
+      field.dataset.key = option.key;
       const text = document.createElement("span");
       text.textContent = option.label;
       const small = document.createElement("small");
       small.textContent = option.description;
       text.append(small);
-      label.append(input, text);
+      if (option.type === "boolean") label.append(field, text);
+      else label.append(text, field);
       return label;
     }));
+  }
+
+  function ruleOptionField(option) {
+    if (option.type === "choice") {
+      const select = document.createElement("select");
+      select.replaceChildren(...option.choices.map((choice) => {
+        const item = document.createElement("option");
+        item.value = choice.value;
+        item.textContent = choice.label;
+        return item;
+      }));
+      select.value = option.default;
+      return select;
+    }
+    const input = document.createElement("input");
+    if (option.type === "number") {
+      input.type = "number";
+      input.value = String(option.default);
+      if (option.min !== undefined) input.min = String(option.min);
+      if (option.max !== undefined) input.max = String(option.max);
+      return input;
+    }
+    input.type = "checkbox";
+    input.checked = option.default;
+    return input;
   }
   elements.gameMode.addEventListener("change", () => renderRuleOptions(elements.gameMode.value));
 

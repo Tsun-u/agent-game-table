@@ -787,8 +787,15 @@ export class MultiplayerTableStore {
       }
       const winner = result.winnerSeatId ? table.seats.find((seat) => seat.id === result.winnerSeatId) ?? null : null;
       if (winner) winner.roundsWon += 1;
-      table.phase = result.gameOver ? "game_over" : "ended";
+      const seated = seatedMembers(table);
+      const scores = Object.fromEntries(seated.map((seat) => [seat.id, seat.gameScore]));
+      const gameOver = result.gameOver || engine.isGameOver(table.options, { round: table.round, scores });
+      table.phase = gameOver ? "game_over" : "ended";
       this.#appendEvent(table, "round_ended", winner, fillEventText(result.text, winner?.name ?? null, table.round));
+      if (gameOver) {
+        const champion = [...seated].sort((left, right) => right.gameScore - left.gameScore)[0] ?? null;
+        this.#appendEvent(table, "game_over", champion, champion ? `整場結束，${champion.name} 以 ${champion.gameScore} 分獲勝。` : "整場結束。");
+      }
       return;
     }
     // 沒有結果卻沒人可以行動：本局無結果地結束（例如玩家不足）。

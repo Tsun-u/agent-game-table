@@ -23,7 +23,7 @@ function pass(state: BigTwoState, seatId: string) {
 
 test("the registry exposes Big Two as the default engine", () => {
   assert.equal(engineFor("bigtwo"), bigTwoEngine);
-  assert.deepEqual(listEngines().map((engine) => engine.mode), ["bigtwo"]);
+  assert.deepEqual(listEngines().map((engine) => engine.mode), ["bigtwo", "gongzhu", "hearts"]);
   assert.throws(() => engineFor("mahjong"), /不支援的遊戲/);
 });
 
