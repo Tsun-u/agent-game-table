@@ -27,7 +27,7 @@
   let celebrationTimer = null;
   const elements = Object.fromEntries(
     [
-      "connectionBadge", "setupPanel", "createForm", "joinForm", "joinHumanName", "humanJoinCode", "humanName", "tablePanel", "joinCode", "copyInvite",
+      "connectionBadge", "setupPanel", "createForm", "joinForm", "joinHumanName", "humanJoinCode", "humanName", "tablePanel", "joinCode", "copyInvite", "rulesLink",
       "pileZone", "pileLabel", "pileCards", "roundLabel", "turnLabel", "playerSeats", "startRound", "playCards", "pass", "selectedCount", "passCards", "passCount",
       "seatCount", "roster", "chatLog", "chatForm", "chatInput", "statusLine", "passphraseLabel", "createPassphrase", "adminKeyLabel", "adminKey",
       "managementPanel", "managementList", "managedTableCount", "managementHint", "refreshTables", "backToTables", "leaveTable",
@@ -567,6 +567,7 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     elements.joinCode.textContent = table.join_code;
     elements.tableName.textContent = `${table.owner_name}的牌桌`;
     elements.ruleOptions.textContent = describeRuleOptions(table);
+    elements.rulesLink.href = `/rules?mode=${encodeURIComponent(table.mode)}&options=${encodeURIComponent(JSON.stringify(table.rule_options ?? {}))}`;
     elements.roundLabel.textContent = table.round ? `第 ${table.round} 局 · ${table.rule_label}` : `${table.rule_label} · 等待開局`;
     elements.seatCount.textContent = String(table.players.length);
 

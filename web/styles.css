@@ -381,3 +381,7 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
 .trick-play.leader small::before { content: "★ "; }
 .playing-card.illegal { opacity: 0.35; }
 .captured-chips { display: block; margin-top: 2px; color: var(--muted); font-size: 0.78rem; letter-spacing: 0.04em; }
+
+.rules-section { margin-top: 22px; }
+.rules-section ul { margin: 10px 0 0; padding-left: 1.2em; line-height: 1.7; }
+.rules-section li + li { margin-top: 4px; }

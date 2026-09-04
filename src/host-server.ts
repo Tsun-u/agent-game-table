@@ -116,6 +116,27 @@ async function routeRequest(
     });
     return;
   }
+  const rulesMatch = method === "GET" ? /^\/api\/games\/([a-z0-9-]+)\/rules$/.exec(url.pathname) : null;
+  if (rulesMatch) {
+    const engine = listEngines().find((candidate) => candidate.mode === rulesMatch[1]);
+    if (!engine) {
+      sendJson(response, 404, { error: "沒有這個遊戲。" });
+      return;
+    }
+    const rawOptions = url.searchParams.get("options");
+    let options: unknown = {};
+    if (rawOptions) {
+      try {
+        options = JSON.parse(rawOptions);
+      } catch {
+        sendJson(response, 400, { error: "options 必須是 JSON。" });
+        return;
+      }
+    }
+    const rules = engine.buildRules(engine.normalizeOptions(options));
+    sendJson(response, 200, { mode: engine.mode, label: engine.label, rules_version: engine.rulesVersion, text: engine.formatRules(rules) });
+    return;
+  }
   if (method === "POST" && url.pathname === "/api/tables") {
     const body = await readJsonBody(request);
     const humanName = requireString(body.human_name, "human_name");
@@ -337,6 +358,8 @@ function staticAsset(pathname: string): string | null {
   if (pathname === "/app.js") return "app.js";
   if (pathname === "/connect" || pathname === "/connect.html") return "connect.html";
   if (pathname === "/connect.js") return "connect.js";
+  if (pathname === "/rules" || pathname === "/rules.html") return "rules.html";
+  if (pathname === "/rules.js") return "rules.js";
   const guideImage = /^\/guide\/([a-z0-9-]+\.webp)$/.exec(pathname);
   if (guideImage) return `guide/${guideImage[1]}`;
   if (pathname === "/styles.css") return "styles.css";

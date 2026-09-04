@@ -53,7 +53,7 @@ claude mcp add --transport stdio --scope user agent-game-table -- node D:\絕對
 UI 的「複製 Agent 邀請詞」會產生可直接貼給 Agent 的提示。也可以自行說：
 
 ```text
-請使用 agent-game-table MCP，先呼叫 get_game_rules 讀取完整大老二規則，
+請使用 agent-game-table MCP，
 再以「小葵」加入牌桌 ABCDEFG。加入後先打招呼；輪到你時只從 legal_plays
 挑選一組 cards 原樣交給 play_cards，或在 legal_actions 允許時 pass；否則用
 wait_for_table_event 等待其他玩家，持續到本局結束。
@@ -175,7 +175,7 @@ Agent instructions 會要求它持續參與後續牌局，直到人類結束測�
 
 | Tool | 用途 |
 | --- | --- |
-| `get_game_rules` | 入座或出牌前讀取目前版本的完整大老二 house rules，不包含任何牌桌暗牌 |
+| `get_game_rules` | 重讀所在牌桌的完整 house rules（依該桌遊戲與房主選項）；桌外只列本 Host 支援的遊戲，規則由 `join_table` 隨桌子給 |
 | `join_table` | 用邀請碼進桌，先在觀戰區；或搭配人類提供的 `reconnect_code` 接回原成員身分 |
 | `take_seat` | 局間從觀戰區入座（最多 4 席），下一局會被發牌 |
 | `leave_seat` | 局間起身回觀戰區讓位，分數跟著成員保留；進行中不能起身 |
@@ -191,7 +191,7 @@ Agent instructions 會要求它持續參與後續牌局，直到人類結束測�
 
 ### Agent 規則與合法牌組
 
-MCP 公開版本化的 `bigtwo-tw-5` 規則表，內容與 Host 實際判定一致，包含牌碼、點數與花色順序、發牌方式、首攻、合法牌型、五張牌型比較、PASS／收墩流程及計分。`get_game_rules` 可在尚未入座時呼叫，回傳預設選項的規則；房主開桌時可開啟「鐵支同花順全壓」與「五張同牌型互壓」，`join_table` 成功時附上的規則表會依該桌設定生成（`table_options`），牌桌視角也帶 `rule_options`，`legal_plays` 已依此計算。
+MCP 公開版本化的 `bigtwo-tw-5` 規則表，內容與 Host 實際判定一致，包含牌碼、點數與花色順序、發牌方式、首攻、合法牌型、五張牌型比較、PASS／收墩流程及計分。`get_game_rules` 只在進桌後回規則（桌外只列支援的遊戲，避免拿到跟自己那桌無關的規則）；房主開桌時可開啟「鐵支同花順全壓」與「五張同牌型互壓」，`join_table` 成功時附上的規則表會依該桌設定生成（`table_options`），牌桌視角也帶 `rule_options`，`legal_plays` 已依此計算。
 
 只有輪到 Agent 行動時，`table.legal_plays` 才會列出牌組。每個項目包含 `cards` 與 `hand_type`，且已同時通過牌型、首攻必帶牌與壓過桌面牌組的檢查；Agent 應依自己的策略選擇其中一項，但不得自行修改其中的牌碼。人類視角及非當前 Agent 的 `legal_plays` 為空陣列，避免無用的大型回傳。
 

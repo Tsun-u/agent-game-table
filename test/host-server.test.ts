@@ -28,6 +28,13 @@ test("HTTP Host serves the Big Two table and shares one authority with Agent cli
     method: "POST",
     body: { human_name: "隔壁桌" },
   });
+  const rules = await fetch(`${host.url}/api/games/hearts/rules?options=${encodeURIComponent(JSON.stringify({ end_mode: "rounds", end_rounds: 6 }))}`);
+  assert.equal(rules.status, 200);
+  const rulesPayload = await rules.json() as { label: string; text: string };
+  assert.equal(rulesPayload.label, "傷心小棧");
+  assert.match(rulesPayload.text, /打滿 6 局/);
+  assert.equal((await fetch(`${host.url}/api/games/nope/rules`)).status, 404);
+  assert.match(await (await fetch(`${host.url}/rules`)).text(), /本桌規則/);
   const managed = await fetch(`${host.url}/api/admin/tables`);
   assert.equal(managed.status, 200);
   assert.equal((await managed.json() as { tables: unknown[] }).tables.length, 2);

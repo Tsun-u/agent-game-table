@@ -27,6 +27,13 @@ export const DEFAULT_HEARTS_OPTIONS: GongzhuOptions = Object.freeze({
   grand_slam: false, hearts_low_zero: false, transformer_alone_bonus: false, heart_break_lead: true, partnership: false,
 });
 
+/** 規則表給人也給 AI 讀，選項值用「開／關」與選項標籤呈現，不露 true／false 或 key。 */
+function displayOptionValue(option: OptionDescription, value: string | number | boolean): string | number {
+  if (option.type === "boolean") return value ? "開" : "關";
+  if (option.type === "choice") return option.choices.find((choice) => choice.value === value)?.label ?? String(value);
+  return value as number;
+}
+
 const END_OPTIONS = (defaultScore: number): OptionDescription[] => [
   { key: "end_mode", type: "choice", label: "結束方式", description: "分數制：任一家累積到結束分數就整場結束；局數制：打滿指定局數結算。", default: "score", choices: [{ value: "score", label: "分數制" }, { value: "rounds", label: "局數制" }] },
   { key: "end_score", type: "number", label: "結束分數", description: "任一家累積分低於或等於這個數就結束。", default: defaultScore, min: -100000, max: 0, visibleWhen: { key: "end_mode", value: "score" } },
@@ -96,7 +103,7 @@ const SHARED_TRICK_FLOW = [
 
 export function buildGongzhuRules(options: GongzhuOptions, variant: GongzhuVariant): GongzhuRules {
   const descriptions = variant === "hearts" ? HEARTS_OPTION_DESCRIPTIONS : GONGZHU_OPTION_DESCRIPTIONS;
-  const tableOptions = descriptions.map((option) => ({ key: option.key, label: option.label, value: options[option.key as keyof GongzhuOptions], description: option.description }));
+  const tableOptions = descriptions.map((option) => ({ key: option.key, label: option.label, value: displayOptionValue(option, options[option.key as keyof GongzhuOptions]), description: option.description }));
   const gameEnd = options.end_mode === "score"
     ? `分數制：任一家累積分低於或等於 ${options.end_score} 時整場結束，分數最高者勝。`
     : `局數制：打滿 ${options.end_rounds} 局結算，分數最高者勝。`;

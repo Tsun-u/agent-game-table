@@ -28,8 +28,9 @@ test("multiple MCP Agents play Big Two with isolated capabilities and event curs
   assert.equal((await first.callTool({ name: "get_table_view", arguments: {} })).isError, true);
 
   const rules = await first.callTool({ name: "get_game_rules", arguments: {} });
-  assert.equal((rules.structuredContent as { rules?: { rules_version?: string } }).rules?.rules_version, "bigtwo-tw-5");
-  assert.equal(JSON.stringify(rules).includes("A-2-3-4-5"), true);
+  const outside = rules.structuredContent as { rules?: unknown; games?: Array<{ mode: string }> };
+  assert.equal(outside.rules, undefined, "outside a table there is no table to read rules from");
+  assert.equal(outside.games?.some((game) => game.mode === "bigtwo"), true);
 
   const created = store.createTable("阿童");
   const firstJoin = await first.callTool({ name: "join_table", arguments: { join_code: created.table.join_code, agent_name: "小葵" } });
