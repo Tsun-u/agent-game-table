@@ -29,8 +29,8 @@ export const DEFAULT_HEARTS_OPTIONS: GongzhuOptions = Object.freeze({
 
 const END_OPTIONS = (defaultScore: number): OptionDescription[] => [
   { key: "end_mode", type: "choice", label: "結束方式", description: "分數制：任一家累積到結束分數就整場結束；局數制：打滿指定局數結算。", default: "score", choices: [{ value: "score", label: "分數制" }, { value: "rounds", label: "局數制" }] },
-  { key: "end_score", type: "number", label: "結束分數", description: "分數制用；任一家累積分低於或等於這個數就結束。", default: defaultScore, min: -100000, max: 0 },
-  { key: "end_rounds", type: "number", label: "結束局數", description: "局數制用；打滿這麼多局就結算。", default: 4, min: 1, max: 99 },
+  { key: "end_score", type: "number", label: "結束分數", description: "任一家累積分低於或等於這個數就結束。", default: defaultScore, min: -100000, max: 0, visibleWhen: { key: "end_mode", value: "score" } },
+  { key: "end_rounds", type: "number", label: "結束局數", description: "打滿這麼多局就結算。", default: 4, min: 1, max: 99, visibleWhen: { key: "end_mode", value: "rounds" } },
 ];
 
 export const GONGZHU_OPTION_DESCRIPTIONS: readonly OptionDescription[] = [

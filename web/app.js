@@ -20,6 +20,7 @@
     /** GET /api/games 的結果：mode → { label, options[] }，開桌表單與規則說明都靠它。 */
     games: {},
     defaultMode: "bigtwo",
+    selectedMode: "",
   };
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   let roundAnimation = null;
@@ -74,12 +75,11 @@
         method: "POST",
         body: {
           human_name: elements.humanName.value.trim(),
-          mode: elements.gameMode.value || state.defaultMode,
+          mode: state.selectedMode || state.defaultMode,
           options: Object.fromEntries(
-            [...elements.ruleOptionFields.querySelectorAll("[data-key]")].map((field) => [
-              field.dataset.key,
-              field.type === "checkbox" ? field.checked : field.type === "number" ? Number(field.value) : field.value,
-            ]),
+            [...elements.ruleOptionFields.querySelectorAll("[data-key]")]
+              .filter((field) => !field.closest("[hidden]"))
+              .map((field) => [field.dataset.key, ruleOptionValue(field)]),
           ),
         },
         authenticated: false,
@@ -420,21 +420,65 @@
     state.defaultMode = result.default_mode;
     state.games = Object.fromEntries(result.games.map((game) => [game.mode, game]));
     elements.gameMode.replaceChildren(...result.games.map((game) => {
-      const option = document.createElement("option");
-      option.value = game.mode;
-      option.textContent = game.label;
-      return option;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.setAttribute("role", "radio");
+      button.dataset.mode = game.mode;
+      button.textContent = game.label;
+      button.addEventListener("click", () => selectGameMode(game.mode));
+      return button;
     }));
-    elements.gameMode.value = result.default_mode;
     elements.gameModeLabel.hidden = result.games.length < 2;
-    renderRuleOptions(result.default_mode);
+    selectGameMode(result.default_mode);
   }
+
+  /** 規則的多選一：一排切換按鈕，選到的值放在 group 的 dataset.value，送出時和 input 一樣用 data-key 收。 */
+  function segmentedChoice(option) {
+    const group = document.createElement("div");
+    group.className = "segmented";
+    group.setAttribute("role", "radiogroup");
+    group.dataset.value = option.default;
+    group.replaceChildren(...option.choices.map((choice) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.setAttribute("role", "radio");
+      button.setAttribute("aria-checked", choice.value === option.default ? "true" : "false");
+      button.textContent = choice.label;
+      button.addEventListener("click", () => {
+        group.dataset.value = choice.value;
+        for (const sibling of group.children) sibling.setAttribute("aria-checked", sibling === button ? "true" : "false");
+        syncRuleOptionVisibility();
+      });
+      return button;
+    }));
+    return group;
+  }
+
+  /** 遊戲切換按鈕群：選中的那顆標 aria-checked，並換成該遊戲的規則選項。 */
+  function selectGameMode(mode) {
+    state.selectedMode = mode;
+    for (const button of elements.gameMode.querySelectorAll("button")) {
+      const checked = button.dataset.mode === mode;
+      button.setAttribute("aria-checked", checked ? "true" : "false");
+      button.tabIndex = checked ? 0 : -1;
+    }
+    renderRuleOptions(mode);
+  }
+  elements.gameMode.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    const modes = [...elements.gameMode.querySelectorAll("button")].map((button) => button.dataset.mode);
+    const index = modes.indexOf(state.selectedMode);
+    const next = modes[(index + (event.key === "ArrowRight" ? 1 : modes.length - 1)) % modes.length];
+    event.preventDefault();
+    selectGameMode(next);
+    elements.gameMode.querySelector(`[data-mode="${next}"]`).focus();
+  });
 
   function renderRuleOptions(mode) {
     const game = state.games[mode];
     const legend = elements.ruleOptionFields.querySelector("legend");
     elements.ruleOptionFields.replaceChildren(legend, ...(game?.options ?? []).map((option) => {
-      const label = document.createElement("label");
+      const label = document.createElement(option.type === "choice" ? "div" : "label");
       label.className = `rule-option rule-option-${option.type}`;
       const field = ruleOptionField(option);
       field.dataset.key = option.key;
@@ -445,22 +489,28 @@
       text.append(small);
       if (option.type === "boolean") label.append(field, text);
       else label.append(text, field);
+      if (option.visibleWhen) label.dataset.visibleWhen = JSON.stringify(option.visibleWhen);
       return label;
     }));
+    syncRuleOptionVisibility();
   }
 
-  function ruleOptionField(option) {
-    if (option.type === "choice") {
-      const select = document.createElement("select");
-      select.replaceChildren(...option.choices.map((choice) => {
-        const item = document.createElement("option");
-        item.value = choice.value;
-        item.textContent = choice.label;
-        return item;
-      }));
-      select.value = option.default;
-      return select;
+  function ruleOptionValue(field) {
+    return field.type === "checkbox" ? field.checked : field.type === "number" ? Number(field.value) : field.dataset.value;
+  }
+
+  /** 帶 visibleWhen 的選項，只在它依賴的選項等於指定值時顯示；隱藏的欄位送出時一起略過。 */
+  function syncRuleOptionVisibility() {
+    const values = Object.fromEntries([...elements.ruleOptionFields.querySelectorAll("[data-key]")].map((field) => [field.dataset.key, ruleOptionValue(field)]));
+    for (const row of elements.ruleOptionFields.querySelectorAll("[data-visible-when]")) {
+      const condition = JSON.parse(row.dataset.visibleWhen);
+      row.hidden = values[condition.key] !== condition.value;
     }
+  }
+  elements.ruleOptionFields.addEventListener("change", syncRuleOptionVisibility);
+
+  function ruleOptionField(option) {
+    if (option.type === "choice") return segmentedChoice(option);
     const input = document.createElement("input");
     if (option.type === "number") {
       input.type = "number";
@@ -473,7 +523,6 @@
     input.checked = option.default;
     return input;
   }
-  elements.gameMode.addEventListener("change", () => renderRuleOptions(elements.gameMode.value));
 
   function setTable(table) {
     const previousTable = state.table;

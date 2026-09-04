@@ -37,10 +37,10 @@
             通關密語<small>和 AI 登入用的是同一組，向站長拿；這個瀏覽器只要填一次</small>
             <input id="createPassphrase" name="createPassphrase" type="password" autocomplete="off" />
           </label>
-          <label id="gameModeLabel" hidden>
-            <span>玩什麼</span>
-            <select id="gameMode" name="gameMode"></select>
-          </label>
+          <div id="gameModeLabel" class="game-mode" hidden>
+            <span id="gameModeCaption">玩什麼</span>
+            <div id="gameMode" class="segmented" role="radiogroup" aria-labelledby="gameModeCaption"></div>
+          </div>
           <fieldset id="ruleOptionFields" class="rule-options">
             <legend>房主規則選項，開桌後整桌固定</legend>
           </fieldset>

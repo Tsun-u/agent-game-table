@@ -43,10 +43,16 @@ export interface EngineTransition<State> {
 }
 
 /** 開桌表單的一個規則選項；布林是開關，數字可自填，choice 是下拉。 */
+/** 只在另一個選項等於某值時才顯示（例如結束分數只在分數制出現）；引擎的 normalizeOptions 仍照常收值。 */
+export interface OptionVisibility {
+  readonly key: string;
+  readonly value: boolean | number | string;
+}
+
 export type OptionDescription =
-  | { readonly key: string; readonly type: "boolean"; readonly label: string; readonly description: string; readonly default: boolean }
-  | { readonly key: string; readonly type: "number"; readonly label: string; readonly description: string; readonly default: number; readonly min?: number; readonly max?: number }
-  | { readonly key: string; readonly type: "choice"; readonly label: string; readonly description: string; readonly default: string; readonly choices: readonly { readonly value: string; readonly label: string }[] };
+  | { readonly key: string; readonly type: "boolean"; readonly label: string; readonly description: string; readonly default: boolean; readonly visibleWhen?: OptionVisibility }
+  | { readonly key: string; readonly type: "number"; readonly label: string; readonly description: string; readonly default: number; readonly min?: number; readonly max?: number; readonly visibleWhen?: OptionVisibility }
+  | { readonly key: string; readonly type: "choice"; readonly label: string; readonly description: string; readonly default: string; readonly choices: readonly { readonly value: string; readonly label: string }[]; readonly visibleWhen?: OptionVisibility };
 
 export interface GameSummary {
   readonly round: number;

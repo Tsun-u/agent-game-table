@@ -70,7 +70,7 @@ input:focus-visible { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(38, 
 .rule-options { display: grid; gap: 10px; margin: 0; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px 14px; }
 .rule-options legend { padding: 0 6px; color: var(--muted); font-size: 0.82rem; }
 .rule-option { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
-.rule-option input { width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--blue); }
+.rule-option input[type="checkbox"] { width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--blue); }
 .rule-option small, .create-form label small, .admin-key small { display: block; color: var(--muted); font-size: 0.8rem; }
 .admin-key { display: grid; gap: 6px; max-width: 420px; margin-bottom: 14px; }
 .form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -359,8 +359,19 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
   .round-celebration { display: none !important; }
 }
 
-.rule-option-number, .rule-option-choice { display: grid; grid-template-columns: minmax(0, 1fr) 120px; align-items: center; gap: 10px; }
-.rule-option-number input, .rule-option-choice select { min-width: 0; padding: 6px 8px; }
+.game-mode { display: grid; gap: 6px; }
+.segmented { display: flex; border: 1.5px solid var(--ink); border-radius: 10px; overflow: hidden; }
+.segmented button {
+  flex: 1 1 0; padding: 9px 10px; border: 0; background: var(--card); color: var(--text);
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+.segmented button + button { border-left: 1px solid var(--line-strong); }
+.segmented button[aria-checked="true"] { background: var(--ink); color: #fff; }
+.segmented button:focus-visible { outline: 2px solid var(--red); outline-offset: -3px; }
+
+.rule-option-number, .rule-option-choice { display: grid; grid-template-columns: minmax(0, 1fr) 160px; align-items: center; gap: 10px; }
+.rule-option-number input { width: 100%; min-width: 0; padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: 8px; font: inherit; }
+.rule-option-choice .segmented button { padding: 6px 8px; font-size: 0.88rem; }
 
 .trick-play { display: grid; justify-items: center; gap: 4px; }
 .trick-play small { color: var(--muted); font-size: 0.78rem; }
