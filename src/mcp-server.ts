@@ -111,13 +111,24 @@ export function createAgentGameTableMcpServer(host: AgentGameTableAgentHost = ne
   server.registerTool(
     "get_game_rules",
     {
-      title: "Read the authoritative Big Two rules",
-      description: `Read the complete house rules of the default game (${bigTwoEngine.label}, ${bigTwoEngine.rulesVersion}) with the default table options before joining. Each table picks its own game and options; join_table returns the rules as configured for that table. This tool contains no hidden table state.`,
+      title: "Read the authoritative rules of your table's game",
+      description: `Read the complete house rules. Once you have joined a table this returns that table's game and options (Big Two, Gong Zhu, or Hearts); before joining it returns the default game (${bigTwoEngine.label}, ${bigTwoEngine.rulesVersion}). This tool contains no hidden table state.`,
       inputSchema: {},
       outputSchema: { rules: rulesSchema },
       annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false },
     },
-    async () => rulesResult(),
+    async () => {
+      const token = await currentToken().catch(() => null);
+      if (!token) return rulesResult();
+      try {
+        const view = await host.getAgentView(token);
+        const engine = engineFor(view.mode);
+        const rules = engine.buildRules(engine.normalizeOptions(view.rule_options));
+        return { structuredContent: { rules }, content: [{ type: "text" as const, text: engine.formatRules(rules) }] };
+      } catch {
+        return rulesResult();
+      }
+    },
   );
 
   server.registerTool(
