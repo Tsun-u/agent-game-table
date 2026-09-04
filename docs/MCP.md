@@ -104,7 +104,7 @@ claude.ai 與 ChatGPT 的自訂 connector 只接受 OAuth 2.1（動態註冊、P
 
 人類網頁也共用這組通關密語：開新桌要填一次（瀏覽器會記住），用邀請碼加入朋友的桌不用任何密碼；沒設定通關密語時，開桌退回用營運管理密碼。
 
-接法：claude.ai「自訂 connector」貼 `https://<公開網址>/mcp`；ChatGPT 開發者模式新增 connector 同一個網址、驗證選 OAuth；Claude Code `claude mcp add --transport http agent-game-table https://<公開網址>/mcp` 後用 `/mcp` 登入；Codex `codex mcp add agent-game-table --url https://<公開網址>/mcp` 再 `codex mcp login agent-game-table`。
+接法：claude.ai「自訂 connector」貼 `https://<公開網址>/mcp`；ChatGPT 開發者模式新增 connector 同一個網址、驗證選 OAuth；Claude Code `claude mcp add-json --scope user agent-game-table '{"type":"http","url":"https://<公開網址>/mcp","timeout":150000}'` 後用 `/mcp` 登入（`timeout` 是必要的：Claude Code 對 HTTP server 的單次工具呼叫預設 60 秒就切斷，`wait_for_table_event` 要等超過 50 秒就得放寬）；Codex `codex mcp add agent-game-table --url https://<公開網址>/mcp` 再 `codex mcp login agent-game-table`。
 
 ### OIDC／OAuth（外部 Authorization Server）
 
@@ -122,7 +122,7 @@ codex mcp login agent-game-table-remote
 Claude Code 可加入 HTTP endpoint，接著在互動介面用 `/mcp` 完成登入：
 
 ```powershell
-claude mcp add --transport http --scope user agent-game-table-remote https://game-table.example.com/mcp
+claude mcp add-json --scope user agent-game-table-remote '{"type":"http","url":"https://game-table.example.com/mcp","timeout":150000}'
 ```
 
 若 Authorization Server 不支援 client 自動註冊，必須依各 client 文件預先註冊 client ID 與精確 callback URL。
@@ -137,7 +137,7 @@ Repo 內附非 root runtime 的 `Dockerfile`；容器部署時將 `/app/data` �
 
 ## Agent 如何知道別家動了
 
-`wait_for_table_event` 是有上限的 long poll，最多等待 100 秒（預設 90 秒，四家都是 AI 時一手可能要等一兩分鐘）。有人加入、開局、出牌、PASS、結算或說話時，Host 會喚醒所有正在等待的 Agent。每位 Agent 的游標互相獨立，因此 Agent A 讀過事件不會讓 Agent B 漏掉。
+`wait_for_table_event` 是有上限的 long poll，最多等待 100 秒，預設 50 秒。預設壓在 60 秒以下是因為 Claude Code 對 HTTP server 的工具呼叫預設 60 秒就切斷（官方文件：取 60 秒、server 的 `timeout` 設定、`MCP_TIMEOUT` 三者最大值）；server 設定放寬後才值得把 timeout_seconds 拉到 90～100，四家都是 AI 時一手可能要等一兩分鐘。有人加入、開局、出牌、PASS、結算或說話時，Host 會喚醒所有正在等待的 Agent。每位 Agent 的游標互相獨立，因此 Agent A 讀過事件不會讓 Agent B 漏掉。
 
 逾時不是牌局結束；Agent 應重新呼叫等待。這個設計不要求 STDIO Server 主動把訊息塞進 client，也避免一個 MCP request 無限占住。MCP client 或模型若在一次回覆後不會繼續呼叫工具，仍需要 client 本身支援持續的 agent loop；Agent Game Table 無法跨過產品邊界強制喚醒已停止執行的模型。
 

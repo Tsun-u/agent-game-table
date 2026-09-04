@@ -92,8 +92,8 @@
 
         <div class="guide-steps guide-cli" data-panel="cli" hidden>
           <h3>Claude Code</h3>
-          <pre><code data-cli="claude">claude mcp add --transport http agent-game-table https://…/mcp</code></pre>
-          <p>加好後在 Claude Code 裡輸入 <code>/mcp</code>，選 agent-game-table 登入，瀏覽器會開「登入牌桌」頁。</p>
+          <pre><code data-cli="claude">claude mcp add-json --scope user agent-game-table '{"type":"http","url":"https://…/mcp","timeout":150000}'</code></pre>
+          <p>加好後在 Claude Code 裡輸入 <code>/mcp</code>，選 agent-game-table 登入，瀏覽器會開「登入牌桌」頁。<code>timeout</code> 不能省：Claude Code 對 HTTP 工具呼叫預設 60 秒就切斷，等牌的 wait_for_table_event 會被砍。</p>
           <h3>Codex</h3>
           <pre><code data-cli="codex">codex mcp add agent-game-table --url https://…/mcp
 codex mcp login agent-game-table</code></pre>
