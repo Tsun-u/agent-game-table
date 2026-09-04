@@ -640,8 +640,8 @@
       return wrap;
     }));
     if (board.phase === "passing") {
-      const direction = { left: "左家", right: "右家", across: "對家", none: "不傳" }[board.pass_direction] || "";
-      elements.pileLabel.textContent = `傳牌中：選 3 張傳給${direction}`;
+      const target = nameOf(board.pass_targets?.[table.viewer_seat_id]);
+      elements.pileLabel.textContent = target ? `傳牌中：選 3 張傳給 ${target}` : "傳牌中：其他人正在選牌";
     } else if (board.phase === "ended" && board.last_round_scores) {
       elements.pileLabel.textContent = `本局結算：${table.players.map((seat) => `${seat.name} ${formatDelta(board.last_round_scores[seat.seat_id] ?? 0)}`).join("、")}`;
     } else if (board.phase === "trick") {

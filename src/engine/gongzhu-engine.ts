@@ -42,6 +42,8 @@ export interface GongzhuBoard extends GameBoardView {
   readonly captured_points: Readonly<Record<string, readonly string[]>>;
   readonly hearts_broken: boolean;
   readonly pass_direction: PassDirection;
+  /** 傳牌階段每一席要傳給誰（席位 id）；不傳的局是空物件。 */
+  readonly pass_targets: Readonly<Record<string, string>>;
   readonly passed: Readonly<Record<string, boolean>>;
   readonly tricks_played: number;
   readonly seat_status: Readonly<Record<string, GongzhuSeatStatus>>;
@@ -101,7 +103,7 @@ export function createGongzhuEngine(variant: GongzhuVariant): GameEngine<Gongzhu
     },
 
     legalActions(state: GongzhuState, seatId: string): readonly LegalAction[] {
-      if (state.phase === "passing") return seatId in state.pendingPasses || !state.order.includes(seatId) ? [] : [{ action: "pass_cards", label: `傳 3 張給${directionLabel(state.passDirection)}` }];
+      if (state.phase === "passing") return seatId in state.pendingPasses || !state.order.includes(seatId) ? [] : [{ action: "pass_cards", label: "傳 3 張" }];
       if (state.phase === "trick" && state.active === seatId) return [{ action: "play_card", label: "出牌" }];
       return [];
     },
@@ -157,9 +159,13 @@ export function createGongzhuEngine(variant: GongzhuVariant): GameEngine<Gongzhu
         status[seatId] = state.phase === "passing" ? (passed[seatId] ? "sent" : "active") : state.active === seatId ? "active" : "waiting";
         capturedPoints[seatId] = (state.captured[seatId] ?? []).filter((card) => isPointCard(card, state.variant));
       }
+      const passTargets: Record<string, string> = {};
+      if (state.passDirection !== "none") {
+        for (const [index, seatId] of state.order.entries()) passTargets[seatId] = state.order[(index + passOffset(state.passDirection)) % state.order.length]!;
+      }
       return {
         phase: state.phase, variant: state.variant, trick: state.trick, captured_points: capturedPoints,
-        hearts_broken: state.heartsBroken, pass_direction: state.passDirection, passed, tricks_played: state.tricksPlayed,
+        hearts_broken: state.heartsBroken, pass_direction: state.passDirection, pass_targets: passTargets, passed, tricks_played: state.tricksPlayed,
         seat_status: status, last_round_scores: state.lastRoundScores,
       };
     },

@@ -163,6 +163,9 @@ test("Hearts: passing rotates left, right, across, none; everyone passes at once
   assert.equal(state.hands[state.active!]!.includes("♣2"), true);
   const board = heartsEngine.view(state, null, HZ) as GongzhuBoard;
   assert.equal(Object.values(board.passed).every(Boolean), true);
+  const firstBoard = heartsEngine.view(first, null, HZ) as GongzhuBoard;
+  assert.deepEqual(firstBoard.pass_targets, { north: "east", east: "south", south: "west", west: "north" }, "left means the next seat in order");
+  assert.deepEqual((heartsEngine.view(fourth, null, HZ) as GongzhuBoard).pass_targets, {});
 });
 
 test("isGameOver honours score mode and round mode", () => {
