@@ -174,9 +174,16 @@ test("MCP Agents can open a Jianhongdian table, capture with a two-card play and
   const humanView = store.getHumanView(created.human_token);
   const humanPlay = humanView.legal_plays[0]!;
   store.humanAction(created.human_token, "play_card", humanView.version, "jh-human-play", [...humanPlay.cards]);
-  const view = tableFrom(await client.callTool({ name: "get_table_view", arguments: {} }));
+  const viewResult = await client.callTool({ name: "get_table_view", arguments: {} });
+  const view = tableFrom(viewResult);
   assert.deepEqual(view.legal_actions, ["play_card"]);
   assert.equal(view.legal_plays.every((play) => play.cards.length === 1 || play.cards.length === 2), true);
+  const text = (viewResult.content as Array<{ text: string }>)[0]!.text;
+  assert.match(text, /桌面：明牌 /, "text summary lists the face-up table cards");
+  assert.match(text, /牌堆剩 23 張/);
+  assert.match(text, /上一翻 阿童 翻出 /);
+  assert.equal(text.includes("新墩"), false, "text summary must not reuse the Big Two template");
+  for (const play of view.legal_plays) assert.equal(text.includes(`[${play.cards.join(" ")}]`), true, `legal play ${play.cards} listed in text`);
   const board = view.board as unknown as { table: string[]; pile_count: number; last_flip: { seat_id: string } | null };
   assert.equal(board.pile_count, 23);
   assert.equal(board.last_flip?.seat_id, humanView.viewer_seat_id);

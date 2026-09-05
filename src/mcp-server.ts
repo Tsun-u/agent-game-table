@@ -392,19 +392,49 @@ function isStaleSeatError(message: string): boolean {
   );
 }
 
+const LEGAL_PLAYS_TEXT_LIMIT = 30;
+
 function summarize(table: PublicTableView): string {
   const you = table.players.find((seat) => seat.is_you);
   const active = table.players.find((seat) => seat.seat_id === table.active_seat_id);
   const actions = table.legal_actions.length ? table.legal_actions.join("、") : "目前沒有可執行動作";
-  const legalPlays = table.legal_plays.length
-    ? `${table.legal_plays.length} 組（請從 structuredContent.table.legal_plays 選一組 cards 原樣送出）`
-    : "無";
-  const pile = table.pile.cards.length ? `${table.pile.played_by_name}：${table.pile.cards.join(" ")}（${table.pile.hand_type}）` : "新墩，尚未出牌";
   return [
     `第 ${table.round} 局｜版本 ${table.version}｜${table.phase}`,
     `你是 ${you?.name ?? "未知座位"}：${you?.cards.join(" ") || "尚未發牌"}（剩 ${you?.hand_count ?? 0} 張｜積分 ${you?.game_score ?? 0}）`,
-    `桌面：${pile}`,
+    `桌面：${summarizeBoard(table)}`,
     `其他手牌：${table.players.filter((seat) => !seat.is_you).map((seat) => `${seat.name} ${seat.hand_count} 張`).join("、") || "無"}`,
-    `目前輪到：${active?.name ?? "無"}｜你的合法動作：${actions}｜合法牌組：${legalPlays}`,
+    `目前輪到：${active?.name ?? "無"}｜你的合法動作：${actions}｜合法牌組：${summarizeLegalPlays(table)}`,
   ].join("｜");
+}
+
+function summarizeLegalPlays(table: PublicTableView): string {
+  if (!table.legal_plays.length) return "無";
+  const shown = table.legal_plays.slice(0, LEGAL_PLAYS_TEXT_LIMIT).map((play) => `[${play.cards.join(" ")}]`).join(" ");
+  const rest = table.legal_plays.length - LEGAL_PLAYS_TEXT_LIMIT;
+  const overflow = rest > 0 ? `…另 ${rest} 組見 structuredContent.table.legal_plays` : "";
+  return `${table.legal_plays.length} 組，動作 ${table.legal_plays[0]?.action}，每組 cards 原樣送出：${shown}${overflow}`;
+}
+
+function summarizeBoard(table: PublicTableView): string {
+  const nameOf = (seatId: string | null) => table.players.find((seat) => seat.seat_id === seatId)?.name ?? seatId ?? "？";
+  const board = table.board as Record<string, unknown>;
+  if (board.phase === "idle") return "尚未開局";
+  if (table.mode === "jianhongdian") {
+    const tableCards = board.table as string[];
+    const flip = board.last_flip as { seat_id: string; card: string; captured: string | null } | null;
+    const bottom = board.bottom_card as string | null;
+    const flipText = flip ? `上一翻 ${nameOf(flip.seat_id)} 翻出 ${flip.card}${flip.captured ? `，收走 ${flip.captured}` : "，留在桌上"}` : "尚未翻牌";
+    const bottomText = bottom ? `｜叨牌：牌堆最後一張是 ${bottom}` : "";
+    return `明牌 ${tableCards.length ? tableCards.join(" ") : "無"}｜牌堆剩 ${board.pile_count} 張｜${flipText}${bottomText}`;
+  }
+  if (table.mode === "gongzhu" || table.mode === "hearts") {
+    const trick = board.trick as { leader: string | null; plays: Array<{ seatId: string; card: string }> };
+    if (board.phase === "passing") {
+      const target = (board.pass_targets as Record<string, string>)[table.viewer_seat_id];
+      return `傳牌階段，你要傳 3 張給 ${nameOf(target ?? null)}`;
+    }
+    if (!trick.plays.length) return "本墩尚未出牌";
+    return `本墩 ${trick.plays.map((play) => `${nameOf(play.seatId)} ${play.card}`).join("、")}`;
+  }
+  return table.pile.cards.length ? `${table.pile.played_by_name}：${table.pile.cards.join(" ")}（${table.pile.hand_type}）` : "新墩，尚未出牌";
 }
