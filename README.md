@@ -1,38 +1,33 @@
 # Agent Game Table
 
-一張讓多位人類與多個 AI Agent 混坐的大老二網頁遊戲桌。
+一張讓人類和 AI Agent 混坐的網頁牌桌。人用瀏覽器開桌、發邀請碼；AI 透過 MCP 進桌，跟人一樣觀戰、入座、出牌、聊天。目前有六款台灣常見的撲克牌遊戲，家規做成開桌選項。
 
-這是從零建立的獨立 repository。共桌 Host、STDIO／Remote MCP、多席位權限、加密持久化、網頁 UI 與 Lottie 動畫皆屬本專案；不包含其他牌桌專案的程式、素材或 Git 歷史。
+## 靈感來源
 
-## 第一階段功能
+這個專案的起點是 [muxihana/cartes](https://github.com/muxihana/cartes)：讓你的 AI 角色當莊家陪你玩 21 點或十點半，他不只會看牌，也會把桌上的恩怨記到下次。看到它之後我們想做另一個方向：不是一個 AI 當莊家，而是好幾個人和好幾個 AI 坐同一桌打多人牌戲。所以 Agent Game Table 把牌桌搬到伺服器端（伺服器權威、對手看不到手牌），AI 用 MCP 當一般玩家進桌，人和 AI 的身分與權限一視同仁。
 
-- 一組邀請碼進桌，人和 AI 進來都先在觀戰區，自己選擇入座；最多 4 席、觀戰不限人數，局間可以換人輪流打；
-- ♣3 起手、單張／一對／順子／葫蘆／鐵支／同花順（台灣慣例：不打同花與三條，五張只能被五張壓）；房主開桌時可另外開啟「鐵支同花順全壓」與「五張同牌型互壓」；
-- 獨立牌桌邀請碼、人類座位憑證與 Agent capability；
-- Server authoritative state，對手只看得到剩餘張數；
-- `expected_version`、冪等寫入與每位 Agent 各自的事件游標；
-- 本機 STDIO MCP，以及可自行架設的 Streamable HTTP Remote MCP；
-- 遊戲引擎層（純函式、可序列化）與牌桌層分離；已有大老二、拱豬、傷心小棧、撿紅點、排七、雙人橋牌（規則版 bigtwo-tw-5／gongzhu-tw-1／hearts-tw-1／jianhongdian-tw-1／paiqi-tw-1／honeymoon-tw-1，家規做成開桌選項），戲谷橋牌與正規橋牌排隊中；
-- 多桌營運台、AES-256-GCM 加密持久化及 Remote principal 綁定；
-- 卡牌互動、回合提示與同源 Lottie 結算動畫，支援 `prefers-reduced-motion`。
-- 介面字體用 justfont 的粉圓（Huninn，OFL），透過 jsDelivr 的 Fontsource 分段載入；Host 的 CSP 已放行 `cdn.jsdelivr.net` 的樣式與字體，離線時退回系統黑體。
+Agent Game Table 是從零建立的獨立 repository，不含 cartes 或其他牌桌專案的程式、素材與 Git 歷史。
 
-大老二規則採台灣民間常見玩法，寫成 TypeScript 規則模組並以 `get_game_rules` 公開（目前版本 `bigtwo-tw-5`）：
+## 遊戲
 
-- 花色 ♣ 梅花 < ♦ 方塊 < ♥ 紅心 < ♠ 黑桃，點數 3 最小、2 最大；首局由持有 ♣3 的玩家先攻且第一手必須包含 ♣3；
-- 牌型只有單張、一對、順子、葫蘆、鐵支、同花順，沒有同花與三條；
-- 順子以 A-2-3-4-5 最小、2-3-4-5-6 最大，2 不得出現在其他順子；
-- 跟牌張數必須相同，五張牌只能被五張牌壓過，鐵支與同花順不能跨張數壓牌；
-- PASS 後本墩不再行動，回合回到最後出牌者時重新領牌；
-- 輸家以剩牌張數計分，手上每留一張 2 就加倍一次；
-- 三人局每人 17 張、留 1 張公開；兩人局每人 13 張、其餘不使用。
+| 遊戲 | 人數 | 規則版 | 家規開關 |
+|---|---|---|---|
+| 大老二 | 2～4 | `bigtwo-tw-5` | 鐵支同花順全壓、五張同牌型互壓 |
+| 拱豬 | 4 | `gongzhu-tw-1` | 結束條件（局數制／分數制）、大滿貫、小紅心不計分、變壓器獨得、紅心破牌、對家配合 |
+| 傷心小棧 | 4 | `hearts-tw-1` | 與拱豬共用引擎的第二種計分 |
+| 撿紅點 | 2～4 | `jianhongdian-tw-1` | 黑 A 計分三段、叨牌 |
+| 排七 | 2～6 | `paiqi-tw-1` | 多的牌處理方式（♠7 出了往下發／攤在公共區）；6 人局加兩張鬼牌 |
+| 雙人橋牌（蜜月橋） | 2 | `honeymoon-tw-1` | 計分方式（橋牌分／墩數差 ×10）、賭倍 |
 
-房主開桌時可以開啟兩個選項，整桌固定、寫進 `join_table` 回傳的規則表與牌桌視角的 `rule_options`：
+規則都是台灣民間常見玩法，寫成 TypeScript 規則模組，`join_table` 成功時會把該桌的完整規則表交給 AI，牌桌的「規則」鈕給人看同一份。各款的家規定案與設計取捨在 [`docs/specs/`](docs/specs/)。
 
-- **鐵支同花順全壓**：鐵支與同花順不受張數限制，可壓桌上任何非鐵支／同花順的牌組，同花順壓鐵支；
-- **五張同牌型互壓**：順子只能被更大的順子壓、葫蘆只能被更大的葫蘆壓（預設是高階牌型可壓低階牌型）。兩個選項同時開啟時，鐵支與同花順仍可壓其他五張牌型。
+## 怎麼玩
 
-專案早期曾參考 MIT 授權的 [XavionM/Big_Two](https://github.com/XavionM/Big_Two) 建立牌型分類的骨架，現行規則已依台灣玩法重新定義，與該專案的 house rules 不同。
+1. 人類在瀏覽器開桌、選遊戲與家規，拿到邀請碼。
+2. 其他人輸入名字與邀請碼加入；AI 由人按「複製邀請詞」把邀請詞交給它，AI 用 `join_table` 進桌。
+3. 進桌的人和 AI 都先在觀戰區，自己按「入座」或 `take_seat`；座位滿了就觀戰，局間可以換人。
+4. 房主開局。輪到誰，牌桌就把所有合法動作列在 `legal_actions`、所有合法牌組列在 `legal_plays`，AI 只要從清單挑一筆原樣送出，不會出錯牌。
+5. 局中有人要離開可以邀請觀戰者代打；沒人接手就流局。
 
 ## 本機開桌
 
@@ -43,25 +38,25 @@ npm install
 npm start
 ```
 
-瀏覽器開啟 `http://127.0.0.1:3210`。其他真人輸入名字與邀請碼即可加入。
+瀏覽器開啟 `http://127.0.0.1:3210`。
 
-把 STDIO MCP 加入 Codex：
-
-```powershell
-codex mcp add agent-game-table -- node D:\絕對路徑\agent-game-table\dist\src\index.js
-```
-
-或加入 Claude Code：
+把 STDIO MCP 加入 Claude Code：
 
 ```powershell
 claude mcp add --transport stdio --scope user agent-game-table -- node D:\絕對路徑\agent-game-table\dist\src\index.js
 ```
 
-在人類 UI 按「複製邀請詞」交給 Agent。Agent 用 `join_table` 進桌（先在觀戰區），成功回傳就附上那一桌遊戲的完整規則；之後可用 `get_game_rules` 重讀，`take_seat` 入座，局間可用 `leave_seat` 回觀戰區讓位。輪到 Agent 時，Host 會在 `legal_plays` 列出所有可合法送出的牌組；Agent 應從中選一組原樣傳給 `play_cards`，或依 `legal_actions` 使用 `pass`／`wait_for_table_event`。
+或加入 Codex：
 
-## Remote MCP
+```powershell
+codex mcp add agent-game-table -- node D:\絕對路徑\agent-game-table\dist\src\index.js
+```
 
-先產生本機部署需要的秘密：
+MCP 工具、AI 該怎麼行動、每款遊戲的 `board` 與動作形狀，都寫在 [`docs/MCP.md`](docs/MCP.md)；`web/connect.html` 是給朋友看的接入教學。
+
+## 自己架 Remote MCP
+
+Remote 模式讓不在同一台電腦的人和 AI 進桌（claude.ai／ChatGPT 的自訂 connector、遠端的 Claude Code／Codex）。先產生秘密：
 
 ```powershell
 npm run generate:remote-secrets -- friend-1 friend-2 friend-3 friend-4
@@ -77,16 +72,23 @@ $env:AGENT_GAME_TABLE_REMOTE_KEYS_FILE="$PWD\data\remote-keys.json"
 npm run start:remote
 ```
 
-服務應置於 HTTPS reverse proxy 後方；每位 Agent 使用不同的 Bearer token，不能共享身分。要讓 claude.ai／ChatGPT 的自訂 connector 或 Claude Code／Codex 用 OAuth 登入，再設定 `AGENT_GAME_TABLE_MEMBERS_FILE`（email 白名單）與 `AGENT_GAME_TABLE_LOGIN_PASSPHRASE`，Host 會自帶登入頁與 OAuth 端點；人類在網頁開新桌也填同一組通關密語，拿邀請碼加入朋友的桌則不用密碼。完整威脅模型、OIDC 與部署設定請看 [`docs/MCP.md`](docs/MCP.md)。
+服務要放在 HTTPS reverse proxy 後方；每位 Agent 用自己的 Bearer token。要讓 connector 用 OAuth 登入，再設定 `AGENT_GAME_TABLE_MEMBERS_FILE`（email 白名單）與 `AGENT_GAME_TABLE_LOGIN_PASSPHRASE`，Host 自帶登入頁與 OAuth 端點；人類開新桌也填同一組通關密語，拿邀請碼加入朋友的桌則不用密碼。威脅模型、OIDC 與部署細節見 [`docs/MCP.md`](docs/MCP.md)。
 
-Windows＋Docker Compose 也可使用：
+Windows＋Docker Compose：
 
 ```powershell
 .\scripts\Start-AgentGameTableRemote.ps1
 .\scripts\Stop-AgentGameTableRemote.ps1
 ```
 
-兩支腳本支援 `-WhatIf`；`.ps1` 皆使用 UTF-8 BOM，以相容 Windows PowerShell。
+兩支腳本支援 `-WhatIf`，檔案是 UTF-8 BOM 以相容 Windows PowerShell。
+
+## 架構
+
+- **牌桌層**（`src/multiplayer-store.ts`）管成員、席位、憑證、版本號（`expected_version`）、冪等寫入、每位 Agent 各自的事件游標、等待喚醒、聊天、大廳與 AES-256-GCM 加密持久化。
+- **引擎層**（`src/engine/`）管從發牌到結算的一切，是對狀態物件操作的純函式，狀態可直接序列化。`GameEngine` 介面在 `src/engine/types.ts`，吃墩類遊戲共用 `trick-taking-core.ts`。
+- **加一款遊戲**：實作 `GameEngine`、在 `src/engine/registry.ts` 登錄、在 `web/app.js` 加桌面渲染、在 `src/mcp-server.ts` 補文字摘要。牌桌層不用改。每款遊戲的流程是規格（`docs/specs/`）→ 實作計畫（`docs/plans/`）→ 實作；家規來源與調查放 `docs/research/`。
+- **前端**是無框架的原生 JavaScript，卡牌互動、回合提示、Lottie 結算動畫，支援 `prefers-reduced-motion`。介面字體用 justfont 的粉圓（Huninn，OFL），透過 jsDelivr 的 Fontsource 分段載入，離線時退回系統黑體。
 
 ## 驗證
 
@@ -101,10 +103,11 @@ npm audit --audit-level=high
 
 ## 這不是公開服務
 
-這個 repo 只有程式，沒有任何公開的伺服器。作者只在自己的電腦上開 Remote 模式給拿到 token 的朋友玩；fork 之後請自己架 Host（本機模式或依上面的 Remote 章節自行部署、自行發 token），本專案不代管、也不提供公用的邀請碼或 MCP 端點。
+這個 repo 只有程式，沒有任何公開的伺服器。作者只在自己的電腦上開 Remote 模式給拿到 token 的朋友玩；fork 之後請自己架 Host，本專案不代管、也不提供公用的邀請碼或 MCP 端點。
 
-## 專案邊界與授權
+## 授權與致謝
 
-- 這個 repo 有自己的 Git 歷史、套件名稱、MCP 名稱、環境變數、Docker service 與瀏覽器儲存鍵。
-- 專案目前只包含大老二；沒有其他牌類遊戲或相容層。
 - 程式以 MIT 授權提供，詳見 [`LICENSE`](LICENSE)。
+- 靈感來自 [muxihana/cartes](https://github.com/muxihana/cartes)（MIT）。
+- 大老二的牌型分類骨架早期曾參考 MIT 授權的 [XavionM/Big_Two](https://github.com/XavionM/Big_Two)，現行規則已依台灣玩法重新定義。
+- 介面字體 [粉圓 Huninn](https://justfont.com/huninn/)（SIL OFL 1.1）。
