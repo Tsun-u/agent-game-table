@@ -1,6 +1,6 @@
 # Agent Game Table MCP 共桌版
 
-Agent Game Table 讓 2～4 位人類與 MCP Agent 混坐同一桌玩大老二。每位玩家都有自己的座位、手牌、回合與積分。MCP 可選完全本機的 STDIO，或自行架設的 Streamable HTTP Remote MCP。
+Agent Game Table 讓人類與 MCP Agent 混坐同一桌打牌（大老二、拱豬、傷心小棧、撿紅點 2～4 席，排七 2～6 席）。每位玩家都有自己的座位、手牌、回合與積分。MCP 可選完全本機的 STDIO，或自行架設的 Streamable HTTP Remote MCP。
 
 本專案是獨立 repository；共桌 UI 位於 `web/`，由本機 Agent Game Table Host 提供。
 
@@ -88,7 +88,7 @@ Remote 模式由 `npm run start:remote` 啟動同一套人類 UI、Host API 與 
 
 ## 遊戲引擎層
 
-牌桌主機分成兩層：**牌桌層**（`src/multiplayer-store.ts`）管成員、席位、憑證、身分、版本號、冪等收據、等待喚醒、事件、聊天、大廳與持久化；**引擎層**（`src/engine/`）管從發牌到結算的一切。引擎是對狀態物件操作的純函式（`GameEngine` 介面在 `src/engine/types.ts`），狀態可直接序列化進快照。已登錄三款：大老二（`src/engine/big-two-engine.ts`）、拱豬與傷心小棧（同一個引擎 `src/engine/gongzhu-engine.ts` 的兩個 mode，吃墩共用核心在 `src/engine/trick-taking-core.ts`），登錄表在 `src/engine/registry.ts`；開桌時 `POST /api/tables` 帶 `mode`（預設 `bigtwo`），`GET /api/games` 列出可玩的遊戲、席位數與規則選項。
+牌桌主機分成兩層：**牌桌層**（`src/multiplayer-store.ts`）管成員、席位、憑證、身分、版本號、冪等收據、等待喚醒、事件、聊天、大廳與持久化；**引擎層**（`src/engine/`）管從發牌到結算的一切。引擎是對狀態物件操作的純函式（`GameEngine` 介面在 `src/engine/types.ts`），狀態可直接序列化進快照。已登錄五款：大老二（`src/engine/big-two-engine.ts`）、拱豬與傷心小棧（同一個引擎 `src/engine/gongzhu-engine.ts` 的兩個 mode，吃墩共用核心在 `src/engine/trick-taking-core.ts`）、撿紅點（`src/engine/jianhongdian-engine.ts`）、排七（`src/engine/paiqi-engine.ts`），登錄表在 `src/engine/registry.ts`；開桌時 `POST /api/tables` 帶 `mode`（預設 `bigtwo`），`GET /api/games` 列出可玩的遊戲、席位數與規則選項。
 
 視圖信封由牌桌層決定，桌面由引擎決定：`PublicTableView.board` 的形狀依遊戲而異（大老二是 `pile / set_aside_cards / opening_required_card / seat_status`），`hand` 是你自己的手牌，`pending_seat_ids` 是現在可以行動的席位（傳牌、叫牌類階段可以同時多個；`active_seat_id` 是相容欄位，等於第一個）。牌桌 phase 是 `lobby | in_round | ended | game_over`，局內細分階段在 `board.phase`。`players[].cards`、`pile`、`set_aside_cards` 這幾個舊欄位暫時保留給既有 client，下一款遊戲上線時移除。
 
@@ -98,7 +98,7 @@ Remote 模式由 `npm run start:remote` 啟動同一套人類 UI、Host API 與 
 
 ### 多桌營運台
 
-同一個 `MultiplayerTableStore` 可同時持有多張互相隔離的牌桌，每桌仍有獨立邀請碼、牌堆、回合與事件游標，並限制 2～4 席。人類 UI 依 table ID 保存多組 capability token，營運台的「另開牌桌」會用帶 table ID 的 URL 開新分頁，因此兩個分頁不會互相切換座位。
+同一個 `MultiplayerTableStore` 可同時持有多張互相隔離的牌桌，每桌仍有獨立邀請碼、牌堆、回合與事件游標，席位上限依遊戲（多數 4 席、排七 6 席）。人類 UI 依 table ID 保存多組 capability token，營運台的「另開牌桌」會用帶 table ID 的 URL 開新分頁，因此兩個分頁不會互相切換座位。
 
 Remote 的 `GET /api/admin/tables` 與 `DELETE /api/admin/tables/:tableId` 必須帶 `X-Agent-Game-Table-Human-Key`。列表只回傳桌號、階段、回合、玩家名稱與座位數，不含手牌、聊天、牌堆或任何 token。關桌會撤銷人類 token、所有 Agent capability、重連碼與 Remote principal 綁定，並釋放正在等待的 long poll。管理密碼只保留在頁面密碼欄，不寫入瀏覽器持久儲存。
 
