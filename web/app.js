@@ -789,13 +789,17 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
       elements.pileLabel.textContent = yourCall ? "點一個叫品，或按 PASS" : `叫牌中，等 ${nameOf(table.active_seat_id)}`;
       return;
     }
+    // 兩張到齊時伺服器立刻清空本墩，所以本墩空著就改畫上一墩（淡化），對手跟的那張才看得到。
     const plays = board.trick?.plays ?? [];
+    const showLast = !plays.length && Boolean(board.last_trick);
+    const shown = showLast ? board.last_trick.plays : plays;
+    const leaderSeatId = showLast ? shown[0]?.seat_id : board.trick?.leader_seat_id;
     const trick = document.createElement("div");
-    trick.className = "bridge-trick";
-    trick.append(...plays.map((play, index) => {
+    trick.className = `bridge-trick${showLast ? " last" : ""}`;
+    trick.append(...shown.map((play, index) => {
       const wrap = document.createElement("div");
-      wrap.className = `trick-play${play.seat_id === board.trick.leader_seat_id ? " leader" : ""}`;
-      wrap.append(cardElement(play.card, index));
+      wrap.className = `trick-play${play.seat_id === leaderSeatId ? " leader" : ""}`;
+      wrap.append(cardElement(play.card, showLast ? -1 : index));
       const label = document.createElement("small");
       label.textContent = nameOf(play.seat_id);
       wrap.append(label);
@@ -816,7 +820,10 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     elements.pileCards.replaceChildren(...pieces);
 
     const leader = board.trick ? nameOf(board.trick.leader_seat_id) : "";
-    const waiting = plays.length ? "" : `等 ${leader} 先出`;
+    const lastWon = showLast
+      ? `上一${board.phase === "play" || board.draw_round === 13 ? "墩" : "輪"} ${nameOf(board.last_trick.winner_seat_id)} 贏${board.last_trick.drew_card ? `，拿走 ${board.last_trick.drew_card}` : ""}`
+      : "";
+    const waiting = [lastWon, plays.length || board.phase === "ended" ? "" : `等 ${leader} 先出`].filter(Boolean).join(" · ");
     if (board.phase === "ended") {
       elements.pileLabel.textContent = board.last_round_detail ? `本局結算：${board.last_round_detail}` : "本局結束";
     } else if (board.phase === "draw") {
