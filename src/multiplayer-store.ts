@@ -367,7 +367,7 @@ export class MultiplayerTableStore {
       const boundSeat = boundTable?.seats.find((seat) => seat.id === binding.seatId);
       if (!boundTable || !boundSeat || boundSeat.kind !== "agent") this.#principalSeats.delete(bindingKey);
       else {
-        if (boundTable.id !== table.id) throw new Error("這個名字的 Agent 已經在另一張牌桌上，請先 leave_table。");
+        if (boundTable.id !== table.id) throw new Error(`這個名字的 Agent 還留在另一張牌桌（邀請碼 ${boundTable.joinCode}）；請先用那組邀請碼 join_table 接回座位、leave_table 離開，或換一個名字。`);
         return this.#reconnectSeat(table, boundSeat, principal, clientId);
       }
     }

@@ -289,6 +289,20 @@ test("management closes one table without exposing cards or affecting another", 
   assert.equal(moved.table.table_id, second.table.table_id);
 });
 
+test("the same principal and name still sitting at another table is told that table's join code", () => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  const first = store.createTable("A 桌人類");
+  const second = store.createTable("B 桌人類");
+  const joined = store.joinAgentForPrincipal(first.table.join_code, "阿宇", "member:tsunu@example.com");
+  assert.throws(
+    () => store.joinAgentForPrincipal(second.table.join_code, "阿宇", "member:tsunu@example.com"),
+    new RegExp(`邀請碼 ${first.table.join_code}`),
+  );
+  store.leaveAgent(joined.agent_token);
+  const moved = store.joinAgentForPrincipal(second.table.join_code, "阿宇", "member:tsunu@example.com");
+  assert.equal(moved.table.table_id, second.table.table_id);
+});
+
 function twoPlayerDeck(): Card[] {
   const ranks = ["3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A", "2"];
   const codes = ranks.flatMap((rank) => [`♣${rank}`, `♦${rank}`]);

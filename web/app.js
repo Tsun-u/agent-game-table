@@ -1176,8 +1176,10 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
       const previousCount = previousSeat?.cards.length ?? 0;
       const shouldAnimate = Boolean(previousTable && previousTable.version !== table.version);
       if (!seat.is_you && seat.hand_count > 0) {
+        // 對手的牌背只在張數變動時亮一下；聊天或觀戰者進出也會換版本號，不該讓手牌抖。
+        const handGrew = seat.hand_count > (previousSeat?.hand_count ?? 0);
         cards.classList.add("opponent-hand");
-        cards.replaceChildren(...Array.from({ length: Math.min(seat.hand_count, 7) }, (_, index) => hiddenCard(index === 0 && shouldAnimate ? 0 : -1)));
+        cards.replaceChildren(...Array.from({ length: Math.min(seat.hand_count, 7) }, (_, index) => hiddenCard(index === 0 && shouldAnimate && handGrew ? 0 : -1)));
       } else if (seat.is_you && (isTrickGame(table) || isBridgeGame(table))) {
         // 換牌拿到的牌（明牌或暗牌）在下一次畫面出現時亮一下。
         const previousCards = new Set(previousSeat?.cards ?? []);
