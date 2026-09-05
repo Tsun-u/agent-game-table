@@ -748,11 +748,16 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
   function renderTrickBoard(table) {
     const board = table.board;
     const nameOf = (seatId) => table.players.find((seat) => seat.seat_id === seatId)?.name ?? "";
+    // 收墩後伺服器立刻清空本墩，本墩空著就淡化畫上一墩，最後一張才不會只閃一下。
     const plays = board.trick?.plays ?? [];
-    elements.pileCards.replaceChildren(...plays.map((play, index) => {
+    const showLast = !plays.length && Boolean(board.last_trick);
+    const shown = showLast ? board.last_trick.plays : plays;
+    const leader = showLast ? shown[0]?.seatId : board.trick?.leader;
+    elements.pileCards.classList.toggle("last-trick", showLast);
+    elements.pileCards.replaceChildren(...shown.map((play, index) => {
       const wrap = document.createElement("div");
-      wrap.className = `trick-play${play.seatId === board.trick.leader ? " leader" : ""}`;
-      wrap.append(cardElement(play.card, index));
+      wrap.className = `trick-play${play.seatId === leader ? " leader" : ""}`;
+      wrap.append(cardElement(play.card, showLast ? -1 : index));
       const label = document.createElement("small");
       label.textContent = nameOf(play.seatId);
       wrap.append(label);
@@ -764,9 +769,10 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     } else if (board.phase === "ended" && board.last_round_scores) {
       elements.pileLabel.textContent = `本局結算：${table.players.map((seat) => `${seat.name} ${formatDelta(board.last_round_scores[seat.seat_id] ?? 0)}`).join("、")}`;
     } else if (board.phase === "trick") {
+      const lastWon = showLast ? `上一墩 ${nameOf(board.last_trick.winnerSeatId)} 收下 · ` : "";
       elements.pileLabel.textContent = plays.length
         ? `第 ${(board.tricks_played ?? 0) + 1} 墩 · ${nameOf(board.trick.leader)} 首出`
-        : `第 ${(board.tricks_played ?? 0) + 1} 墩 · 等 ${nameOf(board.trick.leader)} 首出${board.hearts_broken ? "（紅心已破）" : ""}`;
+        : `${lastWon}第 ${(board.tricks_played ?? 0) + 1} 墩 · 等 ${nameOf(board.trick.leader)} 首出${board.hearts_broken ? "（紅心已破）" : ""}`;
     } else {
       elements.pileLabel.textContent = "等待開局";
     }

@@ -31,6 +31,8 @@ export interface GongzhuState {
   readonly passDirection: PassDirection;
   readonly pendingPasses: Readonly<Record<string, readonly string[]>>;
   readonly active: string | null;
+  /** 剛收走的那一墩，給桌面留殘影；本墩清空後前端改畫它。 */
+  readonly lastTrick: { readonly winnerSeatId: string; readonly plays: readonly TrickPlay[] } | null;
   /** 上一局各家的分數變化，給桌面顯示。 */
   readonly lastRoundScores: Readonly<Record<string, number>> | null;
 }
@@ -39,6 +41,7 @@ export interface GongzhuBoard extends GameBoardView {
   readonly phase: GongzhuState["phase"];
   readonly variant: GongzhuVariant;
   readonly trick: { readonly leader: string | null; readonly plays: readonly TrickPlay[] };
+  readonly last_trick: { readonly winnerSeatId: string; readonly plays: readonly TrickPlay[] } | null;
   readonly captured_points: Readonly<Record<string, readonly string[]>>;
   readonly hearts_broken: boolean;
   readonly pass_direction: PassDirection;
@@ -91,7 +94,7 @@ export function createGongzhuEngine(variant: GongzhuVariant): GameEngine<Gongzhu
       const base: GongzhuState = {
         phase: "passing", variant, order: seatIds, hands, captured,
         trick: { leader: null, plays: [] }, tricksPlayed: 0, heartsBroken: false,
-        passDirection, pendingPasses: {}, active: null, lastRoundScores: null,
+        passDirection, pendingPasses: {}, active: null, lastTrick: null, lastRoundScores: null,
       };
       if (passDirection === "none") return startTricks(base, []);
       return { state: base, events: [{ kind: "passing_started", seatId: null, text: `第 ${input.round} 局先傳牌：每人選 3 張傳給${directionLabel(passDirection)}。` }], result: null };
@@ -141,6 +144,7 @@ export function createGongzhuEngine(variant: GongzhuVariant): GameEngine<Gongzhu
         hands: rekeyRecord(state.hands), captured: rekeyRecord(state.captured), pendingPasses: rekeyRecord(state.pendingPasses),
         trick: { leader: rekey(state.trick.leader), plays: state.trick.plays.map((play) => ({ ...play, seatId: rekey(play.seatId)! })) },
         active: rekey(state.active),
+        lastTrick: state.lastTrick ? { winnerSeatId: rekey(state.lastTrick.winnerSeatId)!, plays: state.lastTrick.plays.map((play) => ({ ...play, seatId: rekey(play.seatId)! })) } : null,
         lastRoundScores: state.lastRoundScores ? rekeyRecord(state.lastRoundScores) : null,
       };
     },
@@ -164,7 +168,7 @@ export function createGongzhuEngine(variant: GongzhuVariant): GameEngine<Gongzhu
         for (const [index, seatId] of state.order.entries()) passTargets[seatId] = state.order[(index + passOffset(state.passDirection)) % state.order.length]!;
       }
       return {
-        phase: state.phase, variant: state.variant, trick: state.trick, captured_points: capturedPoints,
+        phase: state.phase, variant: state.variant, trick: state.trick, last_trick: state.lastTrick, captured_points: capturedPoints,
         hearts_broken: state.heartsBroken, pass_direction: state.passDirection, pass_targets: passTargets, passed, tricks_played: state.tricksPlayed,
         seat_status: status, last_round_scores: state.lastRoundScores,
       };
@@ -191,6 +195,7 @@ export function createGongzhuEngine(variant: GongzhuVariant): GameEngine<Gongzhu
         tricksPlayed: Number(raw.tricksPlayed ?? 0), heartsBroken: Boolean(raw.heartsBroken),
         passDirection: raw.passDirection ?? "none", pendingPasses: (raw.pendingPasses ?? {}) as Record<string, readonly string[]>,
         active: typeof raw.active === "string" ? raw.active : null,
+        lastTrick: (raw.lastTrick ?? null) as GongzhuState["lastTrick"],
         lastRoundScores: (raw.lastRoundScores ?? null) as Record<string, number> | null,
       };
     },
@@ -343,9 +348,10 @@ function applyPlay(state: GongzhuState, seatId: string, cards: readonly string[]
   const captured = { ...state.captured, [winner]: [...(state.captured[winner] ?? []), ...plays.map((play) => play.card)] };
   const tricksPlayed = state.tricksPlayed + 1;
   const won: EngineEvent = { kind: "trick_won", seatId: winner, text: `{name} 收下這墩（${plays.map((play) => play.card).join(" ")}）。` };
-  if (tricksPlayed === 13) return settle({ ...state, hands, heartsBroken, captured, tricksPlayed, trick: { leader: winner, plays }, active: null }, options, [played, won]);
+  const lastTrick = { winnerSeatId: winner, plays };
+  if (tricksPlayed === 13) return settle({ ...state, hands, heartsBroken, captured, tricksPlayed, trick: { leader: winner, plays }, lastTrick, active: null }, options, [played, won]);
   return {
-    state: { ...state, hands, heartsBroken, captured, tricksPlayed, trick: { leader: winner, plays: [] }, active: winner },
+    state: { ...state, hands, heartsBroken, captured, tricksPlayed, trick: { leader: winner, plays: [] }, lastTrick, active: winner },
     events: [played, won, { kind: "turn_started", seatId: winner, text: "輪到 {name} 首出。" }], result: null,
   };
 }

@@ -93,6 +93,12 @@ test("a full Gong Zhu round follows suit, awards tricks, and settles with the ro
     state = transition.state;
     result = transition.result ?? result;
     turns += 1;
+    if (turns === 4) {
+      assert.deepEqual(state.trick.plays, [], "the table is cleared after a trick");
+      assert.equal(state.lastTrick?.plays.length, 4, "the finished trick stays as last_trick for the board");
+      assert.equal(state.lastTrick?.winnerSeatId, state.active);
+      assert.equal((gongzhuEngine.view(state, seatId, GZ).last_trick as { plays: unknown[] }).plays.length, 4);
+    }
   }
   assert.equal(state.phase, "ended");
   assert.equal(turns, 52);
