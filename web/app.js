@@ -600,7 +600,7 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     elements.turnLabel.textContent = table.phase === "lobby"
       ? "等待玩家入座"
       : table.phase === "game_over"
-        ? "整場結束，開桌的人可以再來一場（分數歸零）"
+        ? "整場結束，可以再來一場"
       : table.phase === "ended"
         ? "本局結束，可以再開一局"
       : table.board.phase === "passing"

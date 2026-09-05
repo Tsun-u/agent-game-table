@@ -169,8 +169,9 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--blue); outline-
   justify-self: center; display: inline-flex; align-items: baseline; gap: 10px; max-width: 100%; padding: 6px 16px;
   border-radius: 999px; background: var(--ink); color: #fff;
 }
-.table-status span { font-size: 0.8rem; opacity: 0.75; }
-.table-status strong { font-size: 1.02rem; white-space: nowrap; }
+.table-status { flex-wrap: wrap; justify-content: center; }
+.table-status span { font-size: 0.8rem; opacity: 0.75; white-space: nowrap; }
+.table-status strong { font-size: 1.02rem; text-align: center; }
 .table-status.turn-shift { animation: turn-shift 0.26s cubic-bezier(0.2, 0, 0, 1); }
 
 /* 牌 */
