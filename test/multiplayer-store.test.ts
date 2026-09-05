@@ -321,3 +321,32 @@ test("when the opening-card holder leaves before the first play, the round is vo
   assert.equal(redeal.phase, "in_round");
   assert.equal(redeal.legal_plays.length === 0 || redeal.legal_plays.every((play) => play.cards.includes("♣3")), true);
 });
+
+test("after game_over the owner can start a new match at the same table with scores reset", () => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  const owner = store.createTable("阿童", { end_mode: "rounds", end_rounds: 1 }, "jianhongdian");
+  seatHuman(store, owner.human_token);
+  const agent = store.joinAgent(owner.table.join_code, "小葵");
+  seatAgent(store, agent.agent_token);
+  store.startRound(owner.human_token, tableVersion(store, owner.human_token), "jh-match-start");
+  for (let turn = 0; turn < 60; turn += 1) {
+    const view = store.getHumanView(owner.human_token);
+    if (view.phase !== "in_round") break;
+    if (view.active_seat_id === view.viewer_seat_id) {
+      store.humanAction(owner.human_token, "play_card", view.version, `jh-human-${turn}`, [...view.legal_plays[0]!.cards]);
+    } else {
+      const agentView = store.getAgentView(agent.agent_token);
+      store.agentAction(agent.agent_token, "play_card", agentView.version, `jh-agent-${turn}`, [...agentView.legal_plays[0]!.cards]);
+    }
+  }
+  const finished = store.getHumanView(owner.human_token);
+  assert.equal(finished.phase, "game_over");
+  assert.equal(finished.legal_actions.includes("start_round"), true, "the owner may start a new match");
+  assert.equal(finished.players.some((seat) => seat.game_score !== 0), true, "the finished match carries scores");
+
+  const restarted = store.startRound(owner.human_token, finished.version, "jh-match-again");
+  assert.equal(restarted.phase, "in_round");
+  assert.equal(restarted.round, 1, "the round counter restarts");
+  assert.deepEqual(restarted.players.map((seat) => [seat.game_score, seat.rounds_won]), [[0, 0], [0, 0]]);
+  assert.equal(restarted.players.length, 2, "seats survive the reset");
+});

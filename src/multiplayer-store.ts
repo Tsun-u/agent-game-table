@@ -698,10 +698,10 @@ export class MultiplayerTableStore {
     if (replay) return replay;
     this.#assertVersion(table, expectedVersion);
     if (table.phase === "in_round") throw new Error("目前牌局還沒結束。");
-    if (table.phase === "game_over") throw new Error("這場已經結束，請開新桌。");
     const engine = this.#engine(table);
     const seated = seatedMembers(table);
     if (seated.length < engine.seats.min || seated.length > engine.seats.max) throw new Error(`${engine.label}需要 ${engine.seats.min} 到 ${engine.seats.max} 位入座的玩家才能開始。`);
+    if (table.phase === "game_over") this.#resetMatch(table);
     const round = table.round + 1;
     const deck = this.#deckFactory(round, seated.length).map((card) => typeof card === "string" ? parseCard(card) : card);
     const dealt = engine.deal({ deck, seatIds: seated.map((seat) => seat.id), round }, table.options);
@@ -715,6 +715,17 @@ export class MultiplayerTableStore {
     this.#flushWaiters(table);
     this.#persist();
     return result;
+  }
+
+  /** 整場結束後同一桌再來一場：分數與局數歸零，座位與觀戰區都保留。 */
+  #resetMatch(table: Table): void {
+    for (const seat of table.seats) {
+      seat.gameScore = 0;
+      seat.roundsWon = 0;
+    }
+    table.round = 0;
+    table.game = null;
+    this.#appendEvent(table, "match_reset", null, "再來一場，分數歸零。");
   }
 
   humanAction(humanToken: string, action: TurnAction, expectedVersion: number, idempotencyKey: string, cards: readonly string[] = []): PublicTableView {
@@ -887,7 +898,7 @@ export class MultiplayerTableStore {
     const state = table.game;
     const pending = inRound ? [...engine.pendingSeatIds(state)] : [];
     const legalActions: PublicAction[] = inRound && viewer.seated ? engine.legalActions(state, viewer.id, table.options).map((action) => action.action) : [];
-    if (!inRound && table.phase !== "game_over") {
+    if (!inRound) {
       if (viewer.id === table.ownerSeatId) legalActions.push("start_round");
       if (viewer.seated) legalActions.push("leave_seat");
       else if (seated.length < engine.seats.max) legalActions.push("take_seat");

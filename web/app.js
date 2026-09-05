@@ -588,7 +588,7 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     elements.turnLabel.textContent = table.phase === "lobby"
       ? "等待玩家入座"
       : table.phase === "game_over"
-        ? "整場結束"
+        ? "整場結束，開桌的人可以再來一場（分數歸零）"
       : table.phase === "ended"
         ? "本局結束，可以再開一局"
       : table.board.phase === "passing"
@@ -623,6 +623,7 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
         ? "你在觀戰區。四個座位都滿了，等有人起身再入座。"
         : "你在觀戰區。按「入座」加入下一局。";
     elements.startRound.hidden = !table.legal_actions.includes("start_round");
+    elements.startRound.textContent = table.phase === "game_over" ? "再來一場" : table.phase === "ended" ? "開下一局" : "開始牌局";
     const trick = isTrickGame(table) || isPickGame(table);
     elements.playCards.hidden = trick || table.phase !== "in_round";
     elements.pass.hidden = trick || table.phase !== "in_round";
