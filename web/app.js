@@ -285,8 +285,9 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
   }
 
   /** 雙人橋牌：叫牌格、換牌明牌與本墩都畫在桌面中央，手牌沿用吃墩遊戲的點擊出牌。 */
+  const BRIDGE_MODES = new Set(["honeymoon", "lightbridge"]);
   function isBridgeGame(table) {
-    return table?.mode === "honeymoon";
+    return BRIDGE_MODES.has(table?.mode);
   }
 
   elements.chatForm.addEventListener("submit", async (event) => {
@@ -443,6 +444,7 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     gongzhu: "台灣標準（紅心照牌面、♥4 -10、變壓器獨得 +50）",
     hearts: "台灣標準（每張紅心 -1、♠Q -13、射月）",
     honeymoon: "橋牌分（不記身價）、不賭倍",
+    lightbridge: "合約制（每墩 10 分＋成約獎分）、各家分開算、不賭倍",
   };
 
   /** 邀請詞裡給 AI 的出牌指示，動作名依遊戲不同：大老二是 play_cards 可 PASS，吃墩遊戲是 play_card，傷心小棧多一段傳牌。 */
@@ -452,6 +454,7 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     if (mode === "jianhongdian") return "輪到你時只從 legal_plays 選一筆原樣傳給 play_card（一張是放到桌上、兩張是配對收走）；不是你的回合時呼叫 wait_for_table_event。";
     if (mode === "paiqi") return "輪到你時只從 legal_plays 選一筆原樣送出：action 是 play_card 就出牌（兩張代表鬼牌當目標牌），清單只剩 cover_card 就是沒牌可出、挑一張蓋掉；不是你的回合時呼叫 wait_for_table_event。";
     if (mode === "honeymoon") return "叫牌階段從 legal_plays 挑一個叫品送 bid（cards 放那個叫品字串），或在 legal_actions 允許時送 pass／double／redouble；換牌與打牌階段只從 legal_plays 選一張原樣傳給 play_card；不是你的回合時呼叫 wait_for_table_event。";
+    if (mode === "lightbridge") return "叫牌階段從 legal_plays 挑一個叫品送 bid（cards 放那個叫品字串），或在 legal_actions 允許時送 pass／redeal（倒牌）／double／redouble；打牌階段只從 legal_plays 選一張原樣傳給 play_card；不是你的回合時呼叫 wait_for_table_event。";
     return "輪到你時只從 legal_plays 選一組 cards 原樣傳給 play_cards，或在 legal_actions 允許時 PASS；不是你的回合時呼叫 wait_for_table_event。";
   }
 
@@ -792,7 +795,11 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     if (board.phase === "bidding") {
       elements.pileCards.replaceChildren(bidLog(table), biddingGrid(table));
       const yourCall = table.legal_actions.includes("bid") || table.legal_actions.includes("pass");
-      elements.pileLabel.textContent = yourCall ? "點一個叫品，或按 PASS" : `叫牌中，等 ${nameOf(table.active_seat_id)}`;
+      const hcp = typeof board.viewer_hcp === "number" ? `你的大牌點 ${board.viewer_hcp}` : "";
+      const hint = yourCall
+        ? table.legal_actions.includes("redeal") ? "點一個叫品、PASS，或點力不足可以倒牌" : "點一個叫品，或按 PASS"
+        : `叫牌中，等 ${nameOf(table.active_seat_id)}`;
+      elements.pileLabel.textContent = [hcp, hint].filter(Boolean).join(" · ");
       return;
     }
     // 兩張到齊時伺服器立刻清空本墩，所以本墩空著就改畫上一墩（淡化），對手跟的那張才看得到。
@@ -847,25 +854,27 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     }
   }
 
-  /** 叫牌紀錄：發牌者那欄在左，兩人輪流一列一格。 */
+  /** 叫牌紀錄：一人一欄，發牌者在最左，依席位順序輪流一列一格。 */
   function bidLog(table) {
     const board = table.board;
     const nameOf = (seatId) => table.players.find((seat) => seat.seat_id === seatId)?.name ?? "";
-    const dealer = board.dealer_seat_id;
-    const other = table.players.find((seat) => seat.seat_id !== dealer)?.seat_id ?? "";
+    const seatIds = table.players.map((seat) => seat.seat_id);
+    const dealerIndex = Math.max(0, seatIds.indexOf(board.dealer_seat_id));
+    const columns = seatIds.map((_, index) => seatIds[(dealerIndex + index) % seatIds.length]);
     const log = document.createElement("table");
     log.className = "bid-log";
     const head = document.createElement("tr");
-    for (const seatId of [dealer, other]) {
+    for (const seatId of columns) {
       const cell = document.createElement("th");
       cell.textContent = nameOf(seatId);
       head.append(cell);
     }
     log.append(head);
     const calls = board.bids ?? [];
-    for (let index = 0; index < calls.length; index += 2) {
+    for (let index = 0; index < calls.length; index += columns.length) {
       const row = document.createElement("tr");
-      for (const call of [calls[index], calls[index + 1]]) {
+      for (let offset = 0; offset < columns.length; offset += 1) {
+        const call = calls[index + offset];
         const cell = document.createElement("td");
         cell.textContent = call?.call ?? "";
         if (call?.call && /[♥♦]/.test(call.call)) cell.classList.add("red");
@@ -876,8 +885,8 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     if (!calls.length) {
       const row = document.createElement("tr");
       const cell = document.createElement("td");
-      cell.colSpan = 2;
-      cell.textContent = `${nameOf(dealer)} 發牌，先叫`;
+      cell.colSpan = columns.length;
+      cell.textContent = `${nameOf(board.dealer_seat_id)} 發牌，先叫`;
       row.append(cell);
       log.append(row);
     }
@@ -906,8 +915,9 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     }
     const calls = document.createElement("div");
     calls.className = "bidding-calls";
-    for (const [action, label] of [["pass", "PASS"], ["double", "Double"], ["redouble", "Redouble"]]) {
-      if (action !== "pass" && !table.rule_options?.doubling) continue;
+    for (const [action, label] of [["pass", "PASS"], ["redeal", "倒牌"], ["double", "Double"], ["redouble", "Redouble"]]) {
+      if (action === "redeal" && !table.legal_actions.includes("redeal")) continue;
+      if ((action === "double" || action === "redouble") && !table.rule_options?.doubling) continue;
       const button = document.createElement("button");
       button.type = "button";
       button.className = "bid-button call";

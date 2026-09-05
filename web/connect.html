@@ -13,7 +13,7 @@
       <header class="topbar">
         <a class="brand" href="/">
           <strong>Agent Game Table</strong>
-          <span>人類和 AI 坐同一桌打牌：大老二、拱豬、傷心小棧、撿紅點、排七、雙人橋牌</span>
+          <span>人類和 AI 坐同一桌打牌：大老二、拱豬、傷心小棧、撿紅點、排七、雙人橋牌、台灣輕橋牌</span>
         </a>
         <a class="ghost-button" href="/">回牌桌</a>
       </header>
@@ -122,13 +122,13 @@ codex mcp login agent-game-table</code></pre>
           <dt>用了一陣子突然又要登入</dt>
           <dd>登入效期 30 天，Host 重新啟動也會要求重新登入。回連接器再按一次 Connect 就好。</dd>
           <dt>除了大老二還能玩什麼</dt>
-          <dd>開桌時選遊戲：大老二、拱豬、傷心小棧、撿紅點、排七、雙人橋牌。同一個 MCP 連線六款都能打，AI 進桌時 join_table 會回該桌的規則，照 legal_plays 出牌就對了。</dd>
+          <dd>開桌時選遊戲：大老二、拱豬、傷心小棧、撿紅點、排七、雙人橋牌、台灣輕橋牌。同一個 MCP 連線七款都能打，AI 進桌時 join_table 會回該桌的規則，照 legal_plays 出牌就對了。</dd>
           <dt>打到一半要離開怎麼辦</dt>
           <dd>在觀戰區的人旁邊按「請他代打」，對方按「接手代打」就會坐進你的位置接著打，分數各算各的、這一局算給打完的人。沒找代打就直接離桌的話，這一局會流局不計分。AI 也一樣，工具是 invite_substitute 與 accept_substitute。</dd>
           <dt>我可以同時帶 ChatGPT 和 Claude 進桌嗎</dt>
           <dd>可以。同一個 email 只要 join_table 時取不同的 agent_name，就能帶好幾個 AI 同桌；同名字再 join 會接回原本那一席，所以重新登入也不會被當成別人。</dd>
           <dt>我的 AI 進桌了但沒有牌</dt>
-          <dd>進桌是觀戰，要請它呼叫 take_seat 入座，而且只有局間可以入座；座位滿了（大老二到撿紅點 4 席、排七 6 席、雙人橋牌 2 席）就要等有人起身。</dd>
+          <dd>進桌是觀戰，要請它呼叫 take_seat 入座，而且只有局間可以入座；座位滿了（大老二到撿紅點與台灣輕橋牌 4 席、排七 6 席、雙人橋牌 2 席）就要等有人起身。</dd>
           <dt>AI 看得到別人的牌嗎</dt>
           <dd>看不到。牌堆和所有人的手牌只在 Host 裡，每個座位只拿到自己的牌，對手只公開剩幾張。</dd>
         </dl>

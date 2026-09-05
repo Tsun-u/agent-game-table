@@ -267,6 +267,47 @@ test("MCP Agents can open a Honeymoon Bridge table, bid, and the text summary sh
   assert.equal(text.includes("新墩"), false);
 });
 
+test("MCP Agents can open a Taiwan Light Bridge table, the auction ends after three passes, and the summary shows high-card points", async (context) => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  const host = await startAgentGameTableHost({ port: 0, store });
+  context.after(() => host.close());
+  const created = store.createTable("阿童", undefined, "lightbridge");
+  const clients = [];
+  for (const name of ["小光", "小燈", "小葵"]) {
+    const client = await connectMcp(new AgentGameTableHostClient(host.url), `lb-${name}`, context);
+    const joined = await client.callTool({ name: "join_table", arguments: { join_code: created.table.join_code, agent_name: name } });
+    assert.equal((joined.structuredContent as { rules: { rules_version: string } }).rules.rules_version, "lightbridge-tw-1");
+    clients.push(client);
+  }
+  store.humanTakeSeat(created.human_token, store.getHumanView(created.human_token).version, "lb-owner-seat");
+  for (const [index, client] of clients.entries()) await seatVia(client, `lb-seat-${index}`);
+  store.startRound(created.human_token, store.getHumanView(created.human_token).version, "lb-start");
+  // 第一局由席位順序第一位（人類房主）發牌、先叫。
+  const humanView = store.getHumanView(created.human_token);
+  assert.equal(humanView.active_seat_id, humanView.viewer_seat_id);
+  assert.equal(typeof (humanView.board as unknown as { viewer_hcp: unknown }).viewer_hcp, "number");
+  store.humanAction(created.human_token, "bid", humanView.version, "lb-human-bid", ["1♣"]);
+  // 三家依序 PASS 才結束叫牌；前兩家 PASS 後仍在叫牌階段。
+  for (const [index, client] of clients.entries()) {
+    const viewResult = await client.callTool({ name: "get_table_view", arguments: {} });
+    const view = tableFrom(viewResult);
+    assert.equal(view.active_seat_id, view.viewer_seat_id, `agent ${index} is on turn`);
+    if (index === 0) assert.match((viewResult.content as Array<{ text: string }>)[0]!.text, /你的大牌點 \d+/);
+    const passed = await client.callTool({ name: "take_action", arguments: { action: "pass", cards: [], expected_version: view.version, idempotency_key: `lb-pass-${index}` } });
+    assert.equal(passed.isError, undefined, JSON.stringify(passed.content));
+    const phase = (tableFrom(passed).board as unknown as { phase: string }).phase;
+    assert.equal(phase, index < 2 ? "bidding" : "play");
+  }
+  const afterResult = await clients[0]!.callTool({ name: "get_table_view", arguments: {} });
+  const after = tableFrom(afterResult);
+  const board = after.board as unknown as { contract: { bid: string; seat_id: string } | null; trick: { leader_seat_id: string } | null };
+  assert.equal(board.contract?.bid, "1♣");
+  assert.equal(board.contract?.seat_id, store.getHumanView(created.human_token).viewer_seat_id);
+  assert.equal(board.trick?.leader_seat_id, after.players[1]!.seat_id, "the declarer's left-hand neighbour leads");
+  const text = (afterResult.content as Array<{ text: string }>)[0]!.text;
+  assert.match(text, /打牌中｜合約 1♣/);
+});
+
 test("MCP Agents see every seat pending during Hearts passing and can pass three cards", async (context) => {
   const store = new MultiplayerTableStore(() => createDeck());
   const host = await startAgentGameTableHost({ port: 0, store });
