@@ -71,6 +71,26 @@ const tableSchema = z.object({
   last_event_id: z.number().int().nonnegative(),
 });
 
+/** wait_for_table_event 回的精簡桌面：只留判斷「輪到我沒、要出什麼」需要的欄位，完整視圖用 get_table_view。 */
+const slimTableSchema = z.object({
+  mode: z.string(),
+  phase: z.enum(["lobby", "in_round", "ended", "game_over"]),
+  version: z.number().int().positive(),
+  round: z.number().int().nonnegative(),
+  viewer_seat_id: z.string().uuid(),
+  active_seat_id: z.string().uuid().nullable(),
+  pending_seat_ids: z.array(z.string().uuid()),
+  your_turn: z.boolean(),
+  players: z.array(seatSchema.omit({ cards: true })),
+  substitute_invite: z.object({ from_seat_id: z.string().uuid(), from_name: z.string() }).nullable(),
+  hand: z.array(z.string()),
+  board: z.object({ phase: z.string() }).passthrough(),
+  legal_actions: z.array(z.string()),
+  legal_plays: z.array(z.object({ action: z.string(), cards: z.array(z.string()), hand_type: z.string() })),
+  recent_chat: z.array(chatSchema),
+  last_event_id: z.number().int().nonnegative(),
+});
+
 const eventSchema = z.object({
   event_id: z.number().int().positive(),
   kind: z.string(),
@@ -307,14 +327,16 @@ export function createAgentGameTableMcpServer(host: AgentGameTableAgentHost = ne
     {
       title: "Wait for another table event",
       description:
-        "Wait up to 25 seconds until another seat joins, acts, speaks, starts a round, or ends a round. Your own events are skipped. Each Agent has an independent server-side unread cursor, so another Agent consuming events cannot consume yours.",
+        "Wait until another seat joins, acts, speaks, starts a round, or ends a round. Your own events are skipped. Each Agent has an independent server-side unread cursor, so another Agent consuming events cannot consume yours. On timeout with no events the response is tiny (no table) so idle waiting stays cheap; when events arrive it carries a slim table (your hand, legal_actions, legal_plays, board, players, last 5 chat lines). Call get_table_view when you need the full view.",
       inputSchema: {
         timeout_seconds: z.number().int().min(0).max(100).default(50),
       },
       outputSchema: {
         timed_out: z.boolean(),
         events: z.array(eventSchema),
-        table: tableSchema,
+        version: z.number().int().positive(),
+        your_turn: z.boolean(),
+        table: slimTableSchema.optional(),
       },
       annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false },
     },
@@ -361,13 +383,32 @@ function joinedTableResult(table: PublicTableView) {
   };
 }
 
+/** 空等時不帶桌面，讓每 50 秒一次的輪詢幾乎不花 token；有事件才附精簡桌面。 */
 function eventResult(result: AgentEventResult) {
-  const eventText = result.events.length
-    ? result.events.map((event) => `#${event.event_id} ${event.text}`).join("\n")
-    : "等待逾時，牌桌沒有新事件。";
+  const table = result.table;
+  const yourTurn = table.pending_seat_ids.includes(table.viewer_seat_id);
+  if (!result.events.length) {
+    return {
+      structuredContent: { timed_out: result.timed_out, events: [], version: table.version, your_turn: yourTurn },
+      content: [{ type: "text" as const, text: `等待逾時，牌桌沒有新事件（版本 ${table.version}${yourTurn ? "，輪到你，請 get_table_view" : ""}）。` }],
+    };
+  }
+  const eventText = result.events.map((event) => `#${event.event_id} ${event.text}`).join("\n");
   return {
-    structuredContent: { timed_out: result.timed_out, events: result.events, table: result.table },
-    content: [{ type: "text" as const, text: `${eventText}\n${summarize(result.table)}` }],
+    structuredContent: { timed_out: result.timed_out, events: result.events, version: table.version, your_turn: yourTurn, table: slimTable(table) },
+    content: [{ type: "text" as const, text: `${eventText}\n${summarize(table)}` }],
+  };
+}
+
+function slimTable(table: PublicTableView) {
+  return {
+    mode: table.mode, phase: table.phase, version: table.version, round: table.round,
+    viewer_seat_id: table.viewer_seat_id, active_seat_id: table.active_seat_id, pending_seat_ids: table.pending_seat_ids,
+    your_turn: table.pending_seat_ids.includes(table.viewer_seat_id),
+    players: table.players.map(({ cards: _cards, ...seat }) => seat),
+    substitute_invite: table.substitute_invite,
+    hand: table.hand, board: table.board, legal_actions: table.legal_actions, legal_plays: table.legal_plays,
+    recent_chat: table.recent_chat.slice(-5), last_event_id: table.last_event_id,
   };
 }
 

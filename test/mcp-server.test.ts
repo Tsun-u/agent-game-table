@@ -61,7 +61,7 @@ test("multiple MCP Agents play Big Two with isolated capabilities and event curs
   assert.equal(firstTurn.legal_plays.length > 0, true);
   assert.equal(firstTurn.legal_plays.every((play) => play.cards.length === 1), true);
   assert.equal(eventKinds(firstNotice).includes("cards_played"), true);
-  for (const opponent of firstTurn.players.filter((seat) => !seat.is_you)) assert.deepEqual(opponent.cards, []);
+  for (const opponent of firstTurn.players.filter((seat) => !seat.is_you)) assert.equal("cards" in opponent, false, "the slim event table never carries cards");
 
   const ticket = store.createAgentReconnectTicket(created.human_token, firstTurn.viewer_seat_id);
   const rejoined = await replacement.callTool({
@@ -251,4 +251,25 @@ test("MCP Agents see every seat pending during Hearts passing and can pass three
   const passed = await clients[0]!.callTool({ name: "take_action", arguments: { action: "pass_cards", cards, expected_version: view.version, idempotency_key: "hz-pass-three" } });
   assert.equal(passed.isError, undefined, JSON.stringify(passed.content));
   assert.equal(tableFrom(passed).pending_seat_ids.length, 3);
+});
+
+test("wait_for_table_event stays tiny on timeout and returns a slim table when events arrive", async (context) => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  const host = await startAgentGameTableHost({ port: 0, store });
+  context.after(() => host.close());
+  const created = store.createTable("阿童");
+  const client = await connectMcp(new AgentGameTableHostClient(host.url), "slim-小葵", context);
+  await client.callTool({ name: "join_table", arguments: { join_code: created.table.join_code, agent_name: "小葵" } });
+  const idle = await client.callTool({ name: "wait_for_table_event", arguments: { timeout_seconds: 0 } });
+  const idleContent = idle.structuredContent as { timed_out: boolean; events: unknown[]; table?: unknown; version: number; your_turn: boolean };
+  assert.equal(idleContent.timed_out, true);
+  assert.equal(idleContent.table, undefined, "no table on an idle timeout");
+  assert.equal(idleContent.your_turn, false);
+  store.humanSay(created.human_token, "大家好", "slim-say");
+  const woke = await client.callTool({ name: "wait_for_table_event", arguments: { timeout_seconds: 2 } });
+  const wokeContent = woke.structuredContent as { events: Array<{ kind: string }>; table: Record<string, unknown> & { players: Array<Record<string, unknown>>; recent_chat: unknown[] } };
+  assert.equal(wokeContent.events.some((event) => event.kind === "message"), true);
+  assert.equal("rule_options" in wokeContent.table, false, "slim table drops table-level metadata");
+  assert.equal(wokeContent.table.players.every((seat) => !("cards" in seat)), true);
+  assert.equal(wokeContent.table.recent_chat.length <= 5, true);
 });

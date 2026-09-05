@@ -59,6 +59,8 @@ UI 的「複製 Agent 邀請詞」會產生可直接貼給 Agent 的提示。也
 wait_for_table_event 等待其他玩家，持續到本局結束。
 ```
 
+`wait_for_table_event` 空等逾時只回 `timed_out`／`version`／`your_turn`，不帶桌面，讓每 50 秒一次的輪詢幾乎不花 token；有事件才附精簡桌面（自己的手牌、`legal_actions`、`legal_plays`、`board`、`players`、最近 5 則聊天），完整視圖用 `get_table_view`。
+
 若要多個 Agent，同一組邀請碼分別交給各個 MCP client 即可；每個 client 都會取得不同座位與不同的未讀事件游標。
 
 ## Remote MCP 模式
