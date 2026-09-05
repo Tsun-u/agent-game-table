@@ -767,7 +767,9 @@ export class MultiplayerTableStore {
     });
   }
 
-  #seatAction(table: Table, seat: Seat, action: TurnAction, expectedVersion: number, idempotencyKey: string, cards: readonly string[]): PublicTableView {
+  #seatAction(table: Table, seat: Seat, requestedAction: TurnAction, expectedVersion: number, idempotencyKey: string, cards: readonly string[]): PublicTableView {
+    // 有些 connector 快取了舊版工具清單，只會送大老二的 play_cards；其他遊戲把它當 play_card 的別名。
+    const action = requestedAction === "play_cards" && table.mode !== "bigtwo" ? "play_card" : requestedAction;
     // 牌的順序對撿紅點有意義（手牌在前、桌面牌在後），只有冪等鍵用排序後的版本。
     const normalizedCards = cards.map((card) => card.trim()).filter(Boolean);
     const operation = `take_action:${action}:${[...normalizedCards].sort().join(",")}`;

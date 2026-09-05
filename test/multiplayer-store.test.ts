@@ -350,3 +350,18 @@ test("after game_over the owner can start a new match at the same table with sco
   assert.deepEqual(restarted.players.map((seat) => [seat.game_score, seat.rounds_won]), [[0, 0], [0, 0]]);
   assert.equal(restarted.players.length, 2, "seats survive the reset");
 });
+
+test("play_cards is accepted as an alias of play_card outside Big Two, for clients holding an old tool list", () => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  const owner = store.createTable("阿童", undefined, "jianhongdian");
+  seatHuman(store, owner.human_token);
+  const agent = store.joinAgent(owner.table.join_code, "小回");
+  seatAgent(store, agent.agent_token);
+  store.startRound(owner.human_token, tableVersion(store, owner.human_token), "alias-start");
+  const view = store.getHumanView(owner.human_token);
+  const play = view.legal_plays[0]!;
+  assert.equal(play.action, "play_card");
+  const after = store.humanAction(owner.human_token, "play_cards", view.version, "alias-play", [...play.cards]);
+  assert.equal(after.version, view.version + 1, "the aliased action was applied");
+  assert.equal(after.hand.length, view.hand.length - 1);
+});

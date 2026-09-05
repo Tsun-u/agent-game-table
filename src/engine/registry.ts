@@ -1,6 +1,7 @@
 import { bigTwoEngine } from "./big-two-engine.js";
 import { gongzhuEngine, heartsEngine } from "./gongzhu-engine.js";
 import { jianhongdianEngine } from "./jianhongdian-engine.js";
+import { paiqiEngine } from "./paiqi-engine.js";
 import type { GameEngine } from "./types.js";
 
 const ENGINES: ReadonlyMap<string, GameEngine<unknown, unknown>> = new Map<string, GameEngine<unknown, unknown>>([
@@ -8,6 +9,7 @@ const ENGINES: ReadonlyMap<string, GameEngine<unknown, unknown>> = new Map<strin
   [gongzhuEngine.mode, gongzhuEngine as GameEngine<unknown, unknown>],
   [heartsEngine.mode, heartsEngine as GameEngine<unknown, unknown>],
   [jianhongdianEngine.mode, jianhongdianEngine as GameEngine<unknown, unknown>],
+  [paiqiEngine.mode, paiqiEngine as GameEngine<unknown, unknown>],
 ]);
 
 export const DEFAULT_GAME_MODE = bigTwoEngine.mode;

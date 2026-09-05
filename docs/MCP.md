@@ -191,7 +191,7 @@ Agent instructions 會要求它持續參與後續牌局，直到人類結束測�
 
 ### Agent 規則與合法牌組
 
-MCP 公開版本化的 `bigtwo-tw-5` 規則表，內容與 Host 實際判定一致，包含牌碼、點數與花色順序、發牌方式、首攻、合法牌型、五張牌型比較、PASS／收墩流程及計分。撿紅點（`jianhongdian-tw-1`）：`legal_plays` 每筆一張（放到桌上）或兩張（手牌＋要配的桌面牌），原樣送 `play_card`，翻牌由伺服器自動完成；`board` 有 `table`、`pile_count`、`captured_points`、`points_so_far`、`baseline`、`last_flip`、`bottom_card`（只有尾家且開叨牌時有值）。`get_game_rules` 只在進桌後回規則（桌外只列支援的遊戲，避免拿到跟自己那桌無關的規則）；房主開桌時可開啟「鐵支同花順全壓」與「五張同牌型互壓」，`join_table` 成功時附上的規則表會依該桌設定生成（`table_options`），牌桌視角也帶 `rule_options`，`legal_plays` 已依此計算。
+MCP 公開版本化的 `bigtwo-tw-5` 規則表，內容與 Host 實際判定一致，包含牌碼、點數與花色順序、發牌方式、首攻、合法牌型、五張牌型比較、PASS／收墩流程及計分。撿紅點（`jianhongdian-tw-1`）：`legal_plays` 每筆一張（放到桌上）或兩張（手牌＋要配的桌面牌），原樣送 `play_card`，翻牌由伺服器自動完成；`board` 有 `table`、`pile_count`、`captured_points`、`points_so_far`、`baseline`、`last_flip`、`bottom_card`（只有尾家且開叨牌時有值）。排七（`paiqi-tw-1`，2 到 6 人）：`legal_plays` 有牌可出時每筆 `play_card`，一張是把那張牌接上牌陣、兩張是鬼牌（`🃏1`／`🃏2`，6 人局才有）當第二張牌；沒牌可出時清單只剩 `cover_card`，每張手牌一筆，挑一張蓋掉；`board` 有 `placed`（牌碼 → `card`／`joker`）、`pool`（公共區）、`leftover_count`、`covered_count`、`covered_cards`（局結束才揭露）、`last_play`、`last_round_points`（原始蓋牌點數）與 `last_round_scores`（零和換算後的本局分數）。`get_game_rules` 只在進桌後回規則（桌外只列支援的遊戲，避免拿到跟自己那桌無關的規則）；房主開桌時可開啟「鐵支同花順全壓」與「五張同牌型互壓」，`join_table` 成功時附上的規則表會依該桌設定生成（`table_options`），牌桌視角也帶 `rule_options`，`legal_plays` 已依此計算。
 
 只有輪到 Agent 行動時，`table.legal_plays` 才會列出牌組。每個項目包含 `cards` 與 `hand_type`，且已同時通過牌型、首攻必帶牌與壓過桌面牌組的檢查；Agent 應依自己的策略選擇其中一項，但不得自行修改其中的牌碼。人類視角及非當前 Agent 的 `legal_plays` 為空陣列，避免無用的大型回傳。
 

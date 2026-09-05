@@ -194,6 +194,41 @@ test("MCP Agents can open a Jianhongdian table, capture with a two-card play and
   assert.equal(after.pile_count, 22);
 });
 
+test("MCP Agents can open a Paiqi table, the ♠7 holder opens, and the text summary shows the layout", async (context) => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  const host = await startAgentGameTableHost({ port: 0, store });
+  context.after(() => host.close());
+  const created = store.createTable("阿童", undefined, "paiqi");
+  const client = await connectMcp(new AgentGameTableHostClient(host.url), "pq-小葵", context);
+  const joined = await client.callTool({ name: "join_table", arguments: { join_code: created.table.join_code, agent_name: "小葵" } });
+  assert.equal((joined.structuredContent as { rules: { rules_version: string } }).rules.rules_version, "paiqi-tw-1");
+  store.humanTakeSeat(created.human_token, store.getHumanView(created.human_token).version, "pq-owner-seat");
+  await seatVia(client, "pq-seat-agent");
+  store.startRound(created.human_token, store.getHumanView(created.human_token).version, "pq-start");
+  const humanView = store.getHumanView(created.human_token);
+  const agentViewResult = await client.callTool({ name: "get_table_view", arguments: {} });
+  const agentView = tableFrom(agentViewResult);
+  const opener = humanView.active_seat_id === humanView.viewer_seat_id ? "human" : "agent";
+  if (opener === "human") {
+    assert.deepEqual(humanView.legal_plays.map((play) => play.cards), [["♠7"]], "the ♠7 holder can only open with ♠7");
+    store.humanAction(created.human_token, "play_card", humanView.version, "pq-human-open", ["♠7"]);
+  } else {
+    assert.deepEqual(agentView.legal_plays.map((play) => play.cards), [["♠7"]]);
+    const played = await client.callTool({ name: "take_action", arguments: { action: "play_card", cards: ["♠7"], expected_version: agentView.version, idempotency_key: "pq-agent-open" } });
+    assert.equal(played.isError, undefined, JSON.stringify(played.content));
+  }
+  const afterResult = await client.callTool({ name: "get_table_view", arguments: {} });
+  const after = tableFrom(afterResult);
+  const board = after.board as unknown as { placed: Record<string, string> };
+  assert.equal(board.placed["♠7"], "card");
+  const text = (afterResult.content as Array<{ text: string }>)[0]!.text;
+  assert.match(text, /牌陣 ♠ /, "text summary lists the layout rows");
+  assert.equal(text.includes("新墩"), false);
+  if (after.legal_actions.includes("play_card") || after.legal_actions.includes("cover_card")) {
+    for (const play of after.legal_plays) assert.equal(text.includes(`[${play.cards.join(" ")}]`), true);
+  }
+});
+
 test("MCP Agents see every seat pending during Hearts passing and can pass three cards", async (context) => {
   const store = new MultiplayerTableStore(() => createDeck());
   const host = await startAgentGameTableHost({ port: 0, store });
