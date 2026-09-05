@@ -229,6 +229,44 @@ test("MCP Agents can open a Paiqi table, the ♠7 holder opens, and the text sum
   }
 });
 
+test("MCP Agents can open a Honeymoon Bridge table, bid, and the text summary shows the auction and the face-up stock card", async (context) => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  const host = await startAgentGameTableHost({ port: 0, store });
+  context.after(() => host.close());
+  const created = store.createTable("阿童", undefined, "honeymoon");
+  const client = await connectMcp(new AgentGameTableHostClient(host.url), "hb-小葵", context);
+  const joined = await client.callTool({ name: "join_table", arguments: { join_code: created.table.join_code, agent_name: "小葵" } });
+  assert.equal((joined.structuredContent as { rules: { rules_version: string } }).rules.rules_version, "honeymoon-tw-1");
+  store.humanTakeSeat(created.human_token, store.getHumanView(created.human_token).version, "hb-owner-seat");
+  await seatVia(client, "hb-seat-agent");
+  store.startRound(created.human_token, store.getHumanView(created.human_token).version, "hb-start");
+  // 第一局由席位順序第一位（人類房主）發牌、先叫。
+  const humanView = store.getHumanView(created.human_token);
+  assert.equal(humanView.active_seat_id, humanView.viewer_seat_id);
+  assert.deepEqual(humanView.legal_plays[0]?.cards, ["1♣"]);
+  assert.equal(humanView.legal_plays.length, 35);
+  const bidText = (await client.callTool({ name: "get_table_view", arguments: {} })).content as Array<{ text: string }>;
+  assert.match(bidText[0]!.text, /叫牌中/);
+  store.humanAction(created.human_token, "bid", humanView.version, "hb-human-bid", ["1♣"]);
+  const agentView = tableFrom(await client.callTool({ name: "get_table_view", arguments: {} }));
+  assert.equal(agentView.active_seat_id, agentView.viewer_seat_id);
+  assert.equal(agentView.legal_plays[0]?.cards[0], "1♦", "only bids above 1♣ remain");
+  assert.equal(agentView.legal_actions.includes("double"), false, "doubling is off by default");
+  const passed = await client.callTool({ name: "take_action", arguments: { action: "pass", cards: [], expected_version: agentView.version, idempotency_key: "hb-agent-pass" } });
+  assert.equal(passed.isError, undefined, JSON.stringify(passed.content));
+  const afterResult = await client.callTool({ name: "get_table_view", arguments: {} });
+  const after = tableFrom(afterResult);
+  const board = after.board as unknown as { phase: string; contract: { bid: string } | null; stock_top: string | null; stock_count: number };
+  assert.equal(board.phase, "draw");
+  assert.equal(board.contract?.bid, "1♣");
+  assert.equal(typeof board.stock_top, "string");
+  assert.equal(board.stock_count, 26);
+  const text = (afterResult.content as Array<{ text: string }>)[0]!.text;
+  assert.match(text, /換牌第 1／13 輪，明牌 /);
+  assert.match(text, /合約 1♣/);
+  assert.equal(text.includes("新墩"), false);
+});
+
 test("MCP Agents see every seat pending during Hearts passing and can pass three cards", async (context) => {
   const store = new MultiplayerTableStore(() => createDeck());
   const host = await startAgentGameTableHost({ port: 0, store });

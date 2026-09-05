@@ -284,6 +284,11 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     return TRICK_MODES.has(table.mode);
   }
 
+  /** 雙人橋牌：叫牌格、換牌明牌與本墩都畫在桌面中央，手牌沿用吃墩遊戲的點擊出牌。 */
+  function isBridgeGame(table) {
+    return table?.mode === "honeymoon";
+  }
+
   elements.chatForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const message = elements.chatInput.value.trim();
@@ -437,6 +442,7 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     paiqi: "台灣標準（♠7 首出、有牌必出、J 11 Q 12 K 13）",
     gongzhu: "台灣標準（紅心照牌面、♥4 -10、變壓器獨得 +50）",
     hearts: "台灣標準（每張紅心 -1、♠Q -13、射月）",
+    honeymoon: "橋牌分（不記身價）、不賭倍",
   };
 
   /** 邀請詞裡給 AI 的出牌指示，動作名依遊戲不同：大老二是 play_cards 可 PASS，吃墩遊戲是 play_card，傷心小棧多一段傳牌。 */
@@ -445,6 +451,7 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     if (mode === "gongzhu") return "輪到你時只從 legal_plays 選一張原樣傳給 play_card；不是你的回合時呼叫 wait_for_table_event。";
     if (mode === "jianhongdian") return "輪到你時只從 legal_plays 選一筆原樣傳給 play_card（一張是放到桌上、兩張是配對收走）；不是你的回合時呼叫 wait_for_table_event。";
     if (mode === "paiqi") return "輪到你時只從 legal_plays 選一筆原樣送出：action 是 play_card 就出牌（兩張代表鬼牌當目標牌），清單只剩 cover_card 就是沒牌可出、挑一張蓋掉；不是你的回合時呼叫 wait_for_table_event。";
+    if (mode === "honeymoon") return "叫牌階段從 legal_plays 挑一個叫品送 bid（cards 放那個叫品字串），或在 legal_actions 允許時送 pass／double／redouble；換牌與打牌階段只從 legal_plays 選一張原樣傳給 play_card；不是你的回合時呼叫 wait_for_table_event。";
     return "輪到你時只從 legal_plays 選一組 cards 原樣傳給 play_cards，或在 legal_actions 允許時 PASS；不是你的回合時呼叫 wait_for_table_event。";
   }
 
@@ -605,6 +612,8 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
         ? "本局結束，可以再開一局"
       : table.board.phase === "passing"
         ? `傳牌中，還有 ${table.pending_seat_ids.length} 人`
+      : table.board.phase === "bidding" && active
+        ? `叫牌中，輪到 ${active.name}`
         : active
           ? `輪到 ${active.name}`
           : "牌局結算中";
@@ -636,7 +645,7 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
         : "你在觀戰區。按「入座」加入下一局。";
     elements.startRound.hidden = !table.legal_actions.includes("start_round");
     elements.startRound.textContent = table.phase === "game_over" ? "再來一場" : table.phase === "ended" ? "開下一局" : "開始牌局";
-    const trick = isTrickGame(table) || isPickGame(table) || isLayoutGame(table);
+    const trick = isTrickGame(table) || isPickGame(table) || isLayoutGame(table) || isBridgeGame(table);
     elements.playCards.hidden = trick || table.phase !== "in_round";
     elements.pass.hidden = trick || table.phase !== "in_round";
     elements.layDown.hidden = !isPickGame(table) || !table.legal_actions.includes("play_card");
@@ -722,7 +731,9 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
   function renderPile(table, previousTable) {
     elements.pileCards.classList.toggle("pick-table", isPickGame(table));
     elements.pileCards.classList.toggle("layout-table", isLayoutGame(table));
+    elements.pileCards.classList.toggle("bridge-table", isBridgeGame(table));
     if (isTrickGame(table)) return renderTrickBoard(table);
+    if (isBridgeGame(table)) return renderBridgeBoard(table);
     if (isPickGame(table)) return renderPickBoard(table);
     if (isLayoutGame(table)) return renderLayoutBoard(table);
     const changed = previousTable?.pile?.cards.join("|") !== table.pile.cards.join("|");
@@ -759,6 +770,141 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     } else {
       elements.pileLabel.textContent = "等待開局";
     }
+  }
+
+  const BID_LEVELS = [1, 2, 3, 4, 5, 6, 7];
+  const BID_STRAINS = ["♣", "♦", "♥", "♠", "NT"];
+  const DOUBLED_LABEL = ["", "（Double）", "（Redouble）"];
+
+  /** 雙人橋牌：叫牌階段畫叫品格與叫牌紀錄，換牌階段中央是翻開的明牌與本輪兩張牌，打牌階段是本墩。 */
+  function renderBridgeBoard(table) {
+    const board = table.board;
+    const nameOf = (seatId) => table.players.find((seat) => seat.seat_id === seatId)?.name ?? "";
+    const contract = board.contract
+      ? `合約 ${board.contract.bid}${DOUBLED_LABEL[board.contract.doubled] ?? ""} · ${nameOf(board.contract.seat_id)} 主打`
+      : "";
+    if (board.phase === "bidding") {
+      elements.pileCards.replaceChildren(bidLog(table), biddingGrid(table));
+      const yourCall = table.legal_actions.includes("bid") || table.legal_actions.includes("pass");
+      elements.pileLabel.textContent = yourCall ? "點一個叫品，或按 PASS" : `叫牌中，等 ${nameOf(table.active_seat_id)}`;
+      return;
+    }
+    const plays = board.trick?.plays ?? [];
+    const trick = document.createElement("div");
+    trick.className = "bridge-trick";
+    trick.append(...plays.map((play, index) => {
+      const wrap = document.createElement("div");
+      wrap.className = `trick-play${play.seat_id === board.trick.leader_seat_id ? " leader" : ""}`;
+      wrap.append(cardElement(play.card, index));
+      const label = document.createElement("small");
+      label.textContent = nameOf(play.seat_id);
+      wrap.append(label);
+      return wrap;
+    }));
+    const pieces = [];
+    if (board.phase === "draw" && board.stock_top) {
+      const stock = document.createElement("div");
+      stock.className = "bridge-stock";
+      const top = cardElement(board.stock_top);
+      top.title = "這輪贏的人拿走這張";
+      const label = document.createElement("small");
+      label.textContent = `明牌 · 池裡還有 ${board.stock_count} 張`;
+      stock.append(top, label);
+      pieces.push(stock);
+    }
+    pieces.push(trick);
+    elements.pileCards.replaceChildren(...pieces);
+
+    const leader = board.trick ? nameOf(board.trick.leader_seat_id) : "";
+    const waiting = plays.length ? "" : `等 ${leader} 先出`;
+    if (board.phase === "ended") {
+      elements.pileLabel.textContent = board.last_round_detail ? `本局結算：${board.last_round_detail}` : "本局結束";
+    } else if (board.phase === "draw") {
+      elements.pileLabel.textContent = [`換牌第 ${(board.draw_round ?? 0) + 1}／13 輪`, contract, waiting].filter(Boolean).join(" · ");
+    } else if (board.phase === "play") {
+      const won = board.tricks_won ?? {};
+      const played = Object.values(won).reduce((sum, count) => sum + count, 0);
+      const declarer = board.contract?.seat_id;
+      const need = board.contract ? 6 + Number.parseInt(board.contract.bid, 10) : 0;
+      const remaining = declarer ? Math.max(0, need - (won[declarer] ?? 0)) : 0;
+      const progress = declarer ? `${nameOf(declarer)} ${won[declarer] ?? 0} 墩，還差 ${remaining} 墩成約` : "";
+      elements.pileLabel.textContent = [`第 ${played + 1} 墩`, contract, progress, waiting].filter(Boolean).join(" · ");
+    } else {
+      elements.pileLabel.textContent = "等待開局";
+    }
+  }
+
+  /** 叫牌紀錄：發牌者那欄在左，兩人輪流一列一格。 */
+  function bidLog(table) {
+    const board = table.board;
+    const nameOf = (seatId) => table.players.find((seat) => seat.seat_id === seatId)?.name ?? "";
+    const dealer = board.dealer_seat_id;
+    const other = table.players.find((seat) => seat.seat_id !== dealer)?.seat_id ?? "";
+    const log = document.createElement("table");
+    log.className = "bid-log";
+    const head = document.createElement("tr");
+    for (const seatId of [dealer, other]) {
+      const cell = document.createElement("th");
+      cell.textContent = nameOf(seatId);
+      head.append(cell);
+    }
+    log.append(head);
+    const calls = board.bids ?? [];
+    for (let index = 0; index < calls.length; index += 2) {
+      const row = document.createElement("tr");
+      for (const call of [calls[index], calls[index + 1]]) {
+        const cell = document.createElement("td");
+        cell.textContent = call?.call ?? "";
+        if (call?.call && /[♥♦]/.test(call.call)) cell.classList.add("red");
+        row.append(cell);
+      }
+      log.append(row);
+    }
+    if (!calls.length) {
+      const row = document.createElement("tr");
+      const cell = document.createElement("td");
+      cell.colSpan = 2;
+      cell.textContent = `${nameOf(dealer)} 發牌，先叫`;
+      row.append(cell);
+      log.append(row);
+    }
+    return log;
+  }
+
+  /** 叫品格：7 線 × 5 花色，只有比目前高的叫品可以按；下面一排是 PASS 與賭倍。 */
+  function biddingGrid(table) {
+    const legalBids = new Set(table.legal_plays.filter((play) => play.action === "bid").map((play) => play.cards[0]));
+    const called = new Set((table.board.bids ?? []).map((entry) => entry.call));
+    const wrap = document.createElement("div");
+    wrap.className = "bidding";
+    const grid = document.createElement("div");
+    grid.className = "bidding-grid";
+    for (const level of BID_LEVELS) {
+      for (const strain of BID_STRAINS) {
+        const code = `${level}${strain}`;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `bid-button${strain === "♥" || strain === "♦" ? " red" : ""}${called.has(code) ? " called" : ""}`;
+        button.textContent = code;
+        button.disabled = state.busy || !legalBids.has(code);
+        button.addEventListener("click", () => void gameWrite("/api/human/action", { action: "bid", cards: [code] }));
+        grid.append(button);
+      }
+    }
+    const calls = document.createElement("div");
+    calls.className = "bidding-calls";
+    for (const [action, label] of [["pass", "PASS"], ["double", "Double"], ["redouble", "Redouble"]]) {
+      if (action !== "pass" && !table.rule_options?.doubling) continue;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "bid-button call";
+      button.textContent = label;
+      button.disabled = state.busy || !table.legal_actions.includes(action);
+      button.addEventListener("click", () => void gameWrite("/api/human/action", { action, cards: [] }));
+      calls.append(button);
+    }
+    wrap.append(grid, calls);
+    return wrap;
   }
 
   function renderPickBoard(table) {
@@ -981,6 +1127,14 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
         const earned = isPickGame(table) ? `（${table.board.points_so_far?.[seat.seat_id] ?? 0} 點）` : "";
         chips.textContent = captured.length ? `收：${captured.join(" ")}${earned}` : earned;
         heading.append(chips);
+      } else if (isBridgeGame(table)) {
+        const chips = document.createElement("span");
+        chips.className = "captured-chips";
+        const contract = table.board.contract;
+        const role = contract ? (contract.seat_id === seat.seat_id ? "主打" : "防守") : "";
+        const tricks = table.board.phase === "play" || table.board.phase === "ended" ? `${table.board.tricks_won?.[seat.seat_id] ?? 0} 墩` : "";
+        chips.textContent = [role, tricks].filter(Boolean).join(" · ");
+        heading.append(chips);
       } else if (isLayoutGame(table)) {
         const chips = document.createElement("span");
         chips.className = "captured-chips";
@@ -1001,8 +1155,14 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
       if (!seat.is_you && seat.hand_count > 0) {
         cards.classList.add("opponent-hand");
         cards.replaceChildren(...Array.from({ length: Math.min(seat.hand_count, 7) }, (_, index) => hiddenCard(index === 0 && shouldAnimate ? 0 : -1)));
-      } else if (seat.is_you && isTrickGame(table)) {
-        cards.replaceChildren(...seat.cards.map((code) => trickHandCard(table, code)));
+      } else if (seat.is_you && (isTrickGame(table) || isBridgeGame(table))) {
+        // 換牌拿到的牌（明牌或暗牌）在下一次畫面出現時亮一下。
+        const previousCards = new Set(previousSeat?.cards ?? []);
+        cards.replaceChildren(...seat.cards.map((code) => {
+          const card = trickHandCard(table, code);
+          if (isBridgeGame(table) && previousSeat && !previousCards.has(code)) card.classList.add("just-drawn");
+          return card;
+        }));
       } else if (seat.is_you && isPickGame(table)) {
         cards.replaceChildren(...seat.cards.map((code) => pickHandCard(table, code)));
       } else if (seat.is_you && isLayoutGame(table)) {
@@ -1169,9 +1329,10 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
   function resultText(seat, table) {
     const phase = table.phase;
     if (phase === "ended" && table.board.phase === "idle") return "本局流局";
-    if (isTrickGame(table) || isPickGame(table) || isLayoutGame(table)) {
+    if (isTrickGame(table) || isPickGame(table) || isLayoutGame(table) || isBridgeGame(table)) {
       if (phase === "ended" || phase === "game_over") return table.board.last_round_scores ? `本局 ${formatDelta(table.board.last_round_scores[seat.seat_id] ?? 0)}` : "";
-      return ({ active: table.board.phase === "passing" ? "選牌中" : "正在行動", waiting: "等待", sent: "已傳牌" })[seat.status] || "";
+      const acting = table.board.phase === "passing" ? "選牌中" : table.board.phase === "bidding" ? "叫牌中" : "正在行動";
+      return ({ active: acting, waiting: "等待", sent: "已傳牌" })[seat.status] || "";
     }
     if (phase === "ended") return seat.hand_count === 0 ? "本局勝出" : `剩下 ${seat.hand_count} 張`;
     return ({ active: "正在行動", waiting: "等待回合", passed: "本墩已 PASS", finished: "已出完手牌" })[seat.status] || "";

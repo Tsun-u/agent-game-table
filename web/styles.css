@@ -419,3 +419,32 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
   .layout-grid .playing-card.slot-card span { font-size: 0.8rem; }
   .layout-grid .playing-card.joker-slot small { display: none; }
 }
+
+/* 雙人橋牌：叫牌格、叫牌紀錄、換牌明牌 */
+.pile-cards.bridge-table { flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 16px; }
+.pile-cards.bridge-table .playing-card + .playing-card { margin-left: 0; }
+.bidding { display: grid; gap: 8px; justify-items: center; }
+.bidding-grid { display: grid; grid-template-columns: repeat(5, 52px); gap: 4px; }
+.bid-button { padding: 6px 0; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--card); color: var(--ink); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.bid-button.red { color: var(--red); }
+.bid-button:disabled { opacity: 0.35; }
+.bid-button.called { border-color: var(--ink); background: var(--blue-soft); opacity: 0.85; }
+.bid-button:not(:disabled):hover { border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue-soft); }
+.bidding-calls { display: flex; gap: 8px; }
+.bid-button.call { padding: 6px 16px; border-radius: 999px; letter-spacing: 0.04em; }
+.bid-log { border-collapse: collapse; min-width: 140px; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.bid-log th { padding: 2px 10px; border-bottom: 1px solid var(--line-strong); color: var(--muted); font-weight: 600; text-align: center; }
+.bid-log td { padding: 2px 10px; text-align: center; }
+.bid-log td.red { color: var(--red); }
+.bridge-stock { display: grid; justify-items: center; gap: 4px; padding: 6px 10px; border: 1px dashed var(--line-strong); border-radius: 10px; }
+.bridge-stock small { color: var(--muted); font-size: 0.78rem; }
+.bridge-trick { display: flex; gap: 12px; min-height: 108px; align-items: center; }
+.playing-card.just-drawn { animation: just-drawn 1.2s ease-out; }
+@keyframes just-drawn {
+  0% { box-shadow: 0 0 0 3px var(--blue); transform: translateY(-10px); }
+  100% { box-shadow: none; transform: none; }
+}
+@media (max-width: 640px) {
+  .bidding-grid { grid-template-columns: repeat(5, 44px); gap: 3px; }
+  .bid-button { padding: 5px 0; font-size: 0.8rem; }
+}
