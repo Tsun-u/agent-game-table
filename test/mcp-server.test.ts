@@ -20,7 +20,7 @@ test("multiple MCP Agents play Big Two with isolated capabilities and event curs
 
   const tools = await first.listTools();
   assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [
-    "accept_substitute", "get_game_rules", "get_table_view", "invite_substitute", "join_table", "leave_seat", "leave_table", "say_at_table", "take_action", "take_seat", "wait_for_table_event",
+    "accept_substitute", "get_game_rules", "get_table_view", "invite_substitute", "join_table", "leave_seat", "leave_table", "say_at_table", "set_bidding_system", "take_action", "take_seat", "wait_for_table_event",
   ]);
   const schemas = JSON.stringify(tools);
   assert.equal(schemas.includes('"deck"'), false);
@@ -366,15 +366,20 @@ test("MCP Agents can sit by chair at a Contract Bridge table, finish the auction
     const client = await connectMcp(new AgentGameTableHostClient(host.url), `br-${name}`, context);
     const joined = await client.callTool({ name: "join_table", arguments: { join_code: created.table.join_code, agent_name: name } });
     assert.equal((joined.structuredContent as { rules: { rules_version: string } }).rules.rules_version, "bridge-tw-1");
-    const seated = tableFrom(await client.callTool({ name: "take_seat", arguments: { expected_version: store.getHumanView(created.human_token).version, idempotency_key: `br-seat-${index}`, position: index + 1 } }));
+    const seated = tableFrom(await client.callTool({ name: "take_seat", arguments: { expected_version: store.getHumanView(created.human_token).version, idempotency_key: `br-seat-${index}`, position: index + 1, bidding_system: "taiwan_5542" } }));
     assert.equal(seated.players.find((seat) => seat.is_you)?.chair, ["東", "南", "西"][index]);
+    assert.equal(seated.players.find((seat) => seat.is_you)?.bidding_system, "taiwan_5542", "take_seat declares the bidding system");
     clients.push(client);
   }
+  const switched = tableFrom(await clients[2]!.callTool({ name: "set_bidding_system", arguments: { bidding_system: "sayc", idempotency_key: "br-system-sayc-01" } }));
+  assert.equal(switched.players.find((seat) => seat.is_you)?.bidding_system, "sayc", "set_bidding_system changes the declaration");
   store.humanTakeSeat(created.human_token, store.getHumanView(created.human_token).version, "br-owner-seat", 0);
   store.startRound(created.human_token, store.getHumanView(created.human_token).version, "br-start");
   // 第一局北發牌先叫：房主叫 1NT，東南西三家 PASS。
   const owner = store.getHumanView(created.human_token);
   assert.equal(owner.legal_actions.includes("bid"), true, "北（房主）先叫");
+  assert.notEqual(owner.bid_hint, null, "the dealer gets a bid hint");
+  assert.equal(owner.bid_hint!.call === "PASS" || owner.legal_plays.some((play) => play.cards[0] === owner.bid_hint!.call), true);
   store.humanAction(created.human_token, "bid", owner.version, "br-bid-1nt", ["1NT"]);
   for (const [index, client] of clients.entries()) {
     const current = tableFrom(await client.callTool({ name: "get_table_view", arguments: {} }));

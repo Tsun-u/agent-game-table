@@ -5,6 +5,7 @@ import type { BigTwoRuleOptions } from "./big-two.js";
 import { bigTwoEngine, type BigTwoState } from "./engine/big-two-engine.js";
 import { DEFAULT_GAME_MODE, engineFor } from "./engine/registry.js";
 import type { EngineEvent, EngineTransition, GameBoardView, GameEngine } from "./engine/types.js";
+import { BIDDING_SYSTEMS, DEFAULT_BIDDING_SYSTEM, isBiddingSystemKey, suggestCall, type BidHint, type BiddingSystemKey } from "./engine/bridge-systems.js";
 
 /** 引擎登錄表裡的 mode 字串；目前只有 bigtwo。 */
 export type GameMode = string;
@@ -31,6 +32,9 @@ export interface PublicSeatView {
   /** 有椅子的遊戲才有值：椅子編號與名字（北東南西），對面是搭檔。 */
   readonly position: number | null;
   readonly chair: string | null;
+  /** 合約橋牌的入座者才有值：自己宣告的叫牌制度（公開，搭檔不同只提醒）。 */
+  readonly bidding_system: string | null;
+  readonly bidding_system_label: string | null;
 }
 
 /** 有椅子的遊戲每張椅子一筆，空椅 seat_id 與 name 為 null。 */
@@ -90,6 +94,8 @@ export interface PublicTableView {
   readonly spectators: PublicSpectatorView[];
   /** 有椅子的遊戲才有值；沒有椅子的遊戲入座順序就是座位順序。 */
   readonly chairs: PublicChairView[] | null;
+  /** 合約橋牌叫牌階段輪到觀看者時，依他宣告的制度給的一句建議；只是建議，不限制能叫什麼。 */
+  readonly bid_hint: BidHint | null;
   /** 有人邀你代打時才有值；接受後你會坐進對方的位置，對方退到觀戰區。 */
   readonly substitute_invite: { readonly from_seat_id: string; readonly from_name: string } | null;
   /** 你自己的手牌。 */
@@ -198,6 +204,8 @@ interface Seat {
   readonly name: string;
   seated: boolean;
   seatIndex: number | null;
+  /** 合約橋牌的入座者宣告的叫牌制度；其他遊戲永遠 null。 */
+  biddingSystem: BiddingSystemKey | null;
   gameScore: number;
   roundsWon: number;
   humanTokenHash: string | null;
@@ -284,6 +292,8 @@ export class MultiplayerTableStore {
   readonly #departedAgentTokens = new Map<string, AgentLeaveResult>();
   /** 鍵是 principalBindingKey(身分, Agent 名字)：同一個登入身分可以帶多個名字不同的 Agent。 */
   readonly #principalSeats = new Map<string, { tableId: string; seatId: string }>();
+  /** 各登入身分最後宣告的叫牌制度，下次在任何橋牌桌入座預設帶上。 */
+  readonly #principalSystems = new Map<string, BiddingSystemKey>();
   readonly #deckFactory: MultiplayerDeckFactory;
   readonly #persistence: MultiplayerTablePersistence | undefined;
 
@@ -302,7 +312,7 @@ export class MultiplayerTableStore {
     const humanTokenHash = capabilityHash(humanToken);
     const humanSeat: Seat = {
       id: randomUUID(), kind: "human", name: normalizeName(humanName, "玩家"), seated: false, seatIndex: null,
-      gameScore: 0, roundsWon: 0, humanTokenHash, principalId: null, lastClientId: null,
+      gameScore: 0, roundsWon: 0, biddingSystem: null, humanTokenHash, principalId: null, lastClientId: null,
     };
     const table: Table = {
       id, joinCode, ownerSeatId: humanSeat.id, mode: engine.mode, options: engine.normalizeOptions(options), nextSeatIndex: 0, phase: "lobby", version: 1, round: 0,
@@ -324,7 +334,7 @@ export class MultiplayerTableStore {
     const token = capabilityToken();
     const tokenHash = capabilityHash(token);
     const seat: Seat = {
-      id: randomUUID(), kind: "human", name, seated: false, seatIndex: null, gameScore: 0, roundsWon: 0,
+      id: randomUUID(), kind: "human", name, seated: false, seatIndex: null, gameScore: 0, roundsWon: 0, biddingSystem: null,
       humanTokenHash: tokenHash, principalId: null, lastClientId: null,
     };
     table.seats.push(seat);
@@ -415,7 +425,7 @@ export class MultiplayerTableStore {
     this.#assertMemberAvailable(table);
     const seat: Seat = {
       id: randomUUID(), kind: "agent", name: this.#availableName(table, agentName, "AI 玩家"), seated: false, seatIndex: null,
-      gameScore: 0, roundsWon: 0, humanTokenHash: null, principalId, lastClientId: clientId,
+      gameScore: 0, roundsWon: 0, biddingSystem: null, humanTokenHash: null, principalId, lastClientId: clientId,
     };
     const token = capabilityToken();
     const tokenHash = capabilityHash(token);
@@ -564,14 +574,24 @@ export class MultiplayerTableStore {
     return result;
   }
 
-  humanTakeSeat(humanToken: string, expectedVersion: number, idempotencyKey: string, position?: number): PublicTableView {
+  humanTakeSeat(humanToken: string, expectedVersion: number, idempotencyKey: string, position?: number, biddingSystem?: BiddingSystemKey): PublicTableView {
     const { table, seat } = this.#tableForHuman(humanToken);
-    return this.#takeSeat(table, seat, expectedVersion, idempotencyKey, position);
+    return this.#takeSeat(table, seat, expectedVersion, idempotencyKey, position, biddingSystem);
   }
 
-  agentTakeSeat(agentToken: string, expectedVersion: number, idempotencyKey: string, position?: number): PublicTableView {
+  agentTakeSeat(agentToken: string, expectedVersion: number, idempotencyKey: string, position?: number, biddingSystem?: BiddingSystemKey): PublicTableView {
     const { table, session } = this.#tableForAgent(agentToken);
-    return this.#takeSeat(table, this.#requireSeat(table, session.seatId), expectedVersion, idempotencyKey, position);
+    return this.#takeSeat(table, this.#requireSeat(table, session.seatId), expectedVersion, idempotencyKey, position, biddingSystem);
+  }
+
+  humanSetBiddingSystem(humanToken: string, biddingSystem: unknown, idempotencyKey: string): PublicTableView {
+    const { table, seat } = this.#tableForHuman(humanToken);
+    return this.#setBiddingSystem(table, seat, biddingSystem, idempotencyKey);
+  }
+
+  agentSetBiddingSystem(agentToken: string, biddingSystem: unknown, idempotencyKey: string): PublicTableView {
+    const { table, session } = this.#tableForAgent(agentToken);
+    return this.#setBiddingSystem(table, this.#requireSeat(table, session.seatId), biddingSystem, idempotencyKey);
   }
 
   humanLeaveSeat(humanToken: string, expectedVersion: number, idempotencyKey: string): PublicTableView {
@@ -661,8 +681,26 @@ export class MultiplayerTableStore {
     return invite;
   }
 
-  /** position 只對有椅子的遊戲有意義：挑那張椅子，沒帶就坐編號最小的空椅；沒椅子的遊戲忽略它。 */
-  #takeSeat(table: Table, seat: Seat, expectedVersion: number, idempotencyKey: string, position?: number): PublicTableView {
+  /** 宣告叫牌制度：只有合約橋牌的入座者能宣告，局中也能改（宣告不動牌局）；Agent 的宣告記在身分上。 */
+  #setBiddingSystem(table: Table, seat: Seat, biddingSystem: unknown, idempotencyKey: string): PublicTableView {
+    if (!isBiddingSystemKey(biddingSystem)) throw new Error(`叫牌制度要是 ${BIDDING_SYSTEMS.map((system) => system.key).join("／")} 之一。`);
+    if (this.#engine(table).mode !== "bridge") throw new Error("只有合約橋牌需要宣告叫牌制度。");
+    if (!seat.seated) throw new Error("先入座再宣告制度。");
+    const operation = `bidding_system:${biddingSystem}`;
+    const replay = this.#replay<PublicTableView>(table, seat.id, idempotencyKey, operation);
+    if (replay) return replay;
+    seat.biddingSystem = biddingSystem;
+    if (seat.principalId) this.#principalSystems.set(seat.principalId, biddingSystem);
+    table.version += 1;
+    this.#appendEvent(table, "bidding_system", seat, `${seat.name} 宣告制度：${biddingSystemLabel(biddingSystem)}。`);
+    const result = this.#remember(table, seat.id, idempotencyKey, operation, this.#view(table, seat.id));
+    this.#flushWaiters(table);
+    this.#persist();
+    return result;
+  }
+
+  /** position 只對有椅子的遊戲有意義：挑那張椅子，沒帶就坐編號最小的空椅；沒椅子的遊戲忽略它。合約橋牌另外記下宣告的制度。 */
+  #takeSeat(table: Table, seat: Seat, expectedVersion: number, idempotencyKey: string, position?: number, biddingSystem?: BiddingSystemKey): PublicTableView {
     const operation = "take_seat";
     const replay = this.#replay<PublicTableView>(table, seat.id, idempotencyKey, operation);
     if (replay) return replay;
@@ -684,9 +722,14 @@ export class MultiplayerTableStore {
       seat.seatIndex = table.nextSeatIndex;
       table.nextSeatIndex += 1;
     }
+    if (this.#engine(table).mode === "bridge") {
+      seat.biddingSystem = biddingSystem ?? (seat.principalId ? this.#principalSystems.get(seat.principalId) : undefined) ?? DEFAULT_BIDDING_SYSTEM;
+      if (seat.principalId) this.#principalSystems.set(seat.principalId, seat.biddingSystem);
+    }
     seat.seated = true;
     table.version += 1;
-    this.#appendEvent(table, "seat_taken", seat, chairName ? `${seat.name} 坐${chairName}。` : `${seat.name} 入座。`);
+    const systemText = seat.biddingSystem ? `，打 ${biddingSystemLabel(seat.biddingSystem)}` : "";
+    this.#appendEvent(table, "seat_taken", seat, chairName ? `${seat.name} 坐${chairName}${systemText}。` : `${seat.name} 入座。`);
     const result = this.#remember(table, seat.id, idempotencyKey, operation, this.#view(table, seat.id));
     this.#flushWaiters(table);
     this.#persist();
@@ -943,6 +986,11 @@ export class MultiplayerTableStore {
     const hand = state !== null && viewer.seated ? [...engine.hand(state, viewer.id)] : [];
     const rawPile = (board.pile ?? {}) as { cards?: readonly string[]; hand_type?: string | null; played_by_seat_id?: string | null };
     const pileSeat = rawPile.played_by_seat_id ? table.seats.find((seat) => seat.id === rawPile.played_by_seat_id) ?? null : null;
+    const bidHint = table.mode === "bridge" && inRound && viewer.seated && pending.includes(viewer.id) && board.phase === "bidding"
+      ? legalBidHint(
+        suggestCall(viewer.biddingSystem ?? DEFAULT_BIDDING_SYSTEM, hand, ((board.bids as Array<{ seat_id: string; call: string }> | undefined) ?? []).map((bid) => ({ seatId: bid.seat_id, call: bid.call })), seated.map((member) => member.id), viewer.id),
+        legalActions, legalPlays)
+      : null;
     return {
       table_id: table.id, join_code: table.joinCode, mode: table.mode, rule_label: engine.label, rules_version: engine.rulesVersion,
       rule_options: table.options as Readonly<Record<string, unknown>>, phase: table.phase,
@@ -953,6 +1001,7 @@ export class MultiplayerTableStore {
         hand_count: state !== null ? engine.hand(state, seat.id).length : 0, game_score: seat.gameScore, rounds_won: seat.roundsWon,
         status: seatStatus[seat.id] ?? "waiting", is_you: seat.id === viewerSeatId,
         position: chairs ? seat.seatIndex : null, chair: chairs && seat.seatIndex !== null ? chairs[seat.seatIndex] ?? null : null,
+        bidding_system: seat.biddingSystem, bidding_system_label: seat.biddingSystem ? biddingSystemLabel(seat.biddingSystem) : null,
       })),
       spectators: table.seats.filter((seat) => !seat.seated).map((seat) => ({ seat_id: seat.id, name: seat.name, kind: seat.kind, is_you: seat.id === viewerSeatId })),
       chairs: chairs
@@ -961,6 +1010,7 @@ export class MultiplayerTableStore {
           return { position, chair, seat_id: sitter?.id ?? null, name: sitter?.name ?? null };
         })
         : null,
+      bid_hint: bidHint,
       substitute_invite: inviter ? { from_seat_id: inviter.id, from_name: inviter.name } : null,
       hand, board,
       pile: {
@@ -1094,11 +1144,12 @@ export class MultiplayerTableStore {
   #persist(): void {
     this.#persistence?.save({
       format: "agent-game-table-big-two-store", version: 2,
+      principalSystems: [...this.#principalSystems.entries()],
       tables: [...this.#tables.values()].map((table) => ({
         id: table.id, joinCode: table.joinCode, ownerSeatId: table.ownerSeatId, mode: table.mode, options: table.options, nextSeatIndex: table.nextSeatIndex, phase: table.phase, version: table.version,
         round: table.round, game: table.game === null ? null : this.#engine(table).serialize(table.game),
         seats: table.seats.map((seat) => ({
-          id: seat.id, kind: seat.kind, name: seat.name, seated: seat.seated, seatIndex: seat.seatIndex,
+          id: seat.id, kind: seat.kind, name: seat.name, seated: seat.seated, seatIndex: seat.seatIndex, biddingSystem: seat.biddingSystem,
           gameScore: seat.gameScore, roundsWon: seat.roundsWon, humanTokenHash: seat.humanTokenHash, principalId: seat.principalId, lastClientId: seat.lastClientId,
         })),
         agentSessions: [...table.agentSessions.values()].map((session) => ({ ...session })), events: table.events, chat: table.chat,
@@ -1109,7 +1160,7 @@ export class MultiplayerTableStore {
   }
 
   #restore(value: unknown): void {
-    const snapshot = value as { format?: unknown; version?: unknown; tables?: unknown[]; departedAgentTokens?: [string, AgentLeaveResult][] };
+    const snapshot = value as { format?: unknown; version?: unknown; tables?: unknown[]; departedAgentTokens?: [string, AgentLeaveResult][]; principalSystems?: [string, unknown][] };
     if (snapshot.format !== "agent-game-table-big-two-store" || (snapshot.version !== 1 && snapshot.version !== 2) || !Array.isArray(snapshot.tables)) {
       throw new Error("Agent Game Table 持久化檔案格式無效或版本不支援。");
     }
@@ -1127,6 +1178,7 @@ export class MultiplayerTableStore {
         gameScore: Number(seat.gameScore ?? 0), roundsWon: Number(seat.roundsWon ?? 0),
         humanTokenHash: typeof seat.humanTokenHash === "string" ? seat.humanTokenHash : null,
         ...restoreSeatIdentity(seat.principalId, seat.lastClientId),
+        biddingSystem: isBiddingSystemKey(seat.biddingSystem) ? seat.biddingSystem : null,
       }));
       if (!seats.some((seat) => seat.id === saved.ownerSeatId && seat.kind === "human")) throw new Error("Agent Game Table 開桌者資料無效。");
       const phase = restoreTablePhase(saved.phase);
@@ -1152,7 +1204,20 @@ export class MultiplayerTableStore {
       for (const [tokenHash] of table.agentSessions) this.#agentTokens.set(tokenHash, table.id);
     }
     for (const [tokenHash, departure] of snapshot.departedAgentTokens ?? []) this.#departedAgentTokens.set(tokenHash, structuredClone(departure));
+    for (const [principalId, system] of snapshot.principalSystems ?? []) if (isBiddingSystemKey(system)) this.#principalSystems.set(principalId, system);
   }
+}
+
+function biddingSystemLabel(key: BiddingSystemKey): string {
+  return BIDDING_SYSTEMS.find((system) => system.key === key)?.label ?? key;
+}
+
+/** 建議要對得上合法清單才給：叫品要在 legal_plays、PASS 要能 pass、X 要能 double。 */
+function legalBidHint(hint: BidHint | null, legalActions: readonly string[], legalPlays: readonly { cards: readonly string[] }[]): BidHint | null {
+  if (!hint) return null;
+  if (hint.call === "PASS") return legalActions.includes("pass") ? hint : null;
+  if (hint.call === "X") return legalActions.includes("double") ? hint : null;
+  return legalPlays.some((play) => play.cards[0] === hint.call) ? hint : null;
 }
 
 function restoreTablePhase(value: unknown): TablePhase {

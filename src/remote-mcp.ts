@@ -1,3 +1,4 @@
+import { isBiddingSystemKey, type BiddingSystemKey } from "./engine/bridge-systems.js";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
@@ -280,8 +281,12 @@ class PrincipalStoreHost implements AgentGameTableAgentHost {
     return this.#store.agentSay(agentToken, message, idempotencyKey);
   }
 
-  async takeSeat(agentToken: string, expectedVersion: number, idempotencyKey: string, position?: number): Promise<PublicTableView> {
-    return this.#store.agentTakeSeat(agentToken, expectedVersion, idempotencyKey, position);
+  async takeSeat(agentToken: string, expectedVersion: number, idempotencyKey: string, position?: number, biddingSystem?: string): Promise<PublicTableView> {
+    return this.#store.agentTakeSeat(agentToken, expectedVersion, idempotencyKey, position, optionalSystem(biddingSystem));
+  }
+
+  async setBiddingSystem(agentToken: string, biddingSystem: string, idempotencyKey: string): Promise<PublicTableView> {
+    return this.#store.agentSetBiddingSystem(agentToken, biddingSystem, idempotencyKey);
   }
 
   async leaveSeat(agentToken: string, expectedVersion: number, idempotencyKey: string): Promise<PublicTableView> {
@@ -348,4 +353,8 @@ function hashSecret(value: string): Buffer {
 
 function safeSecretEqual(value: string, expectedHash: Buffer): boolean {
   return timingSafeEqual(hashSecret(value), expectedHash);
+}
+
+function optionalSystem(value: string | undefined): BiddingSystemKey | undefined {
+  return isBiddingSystemKey(value) ? value : undefined;
 }

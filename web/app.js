@@ -3,6 +3,36 @@
 
   const TOKENS_KEY = "agent_game_table_human_tokens_v1";
   const PASSPHRASE_KEY = "agent_game_table_create_passphrase_v1";
+  const BIDDING_SYSTEM_KEY = "agent_game_table_bidding_system_v1";
+  /** 合約橋牌的叫牌制度；key 與伺服器的 BiddingSystemKey 相同，短名給玩家列用。 */
+  const BIDDING_SYSTEMS = [
+    { key: "sayc", label: "SAYC（5533、1NT 15-17）", short: "SAYC" },
+    { key: "taiwan_5533", label: "台灣自然制 5533（1NT 16-18）", short: "台灣 5533" },
+    { key: "taiwan_5542", label: "台灣自然制 5542（1NT 15-17）", short: "台灣 5542" },
+  ];
+  function savedBiddingSystem() {
+    try {
+      const saved = localStorage.getItem(BIDDING_SYSTEM_KEY);
+      return BIDDING_SYSTEMS.some((system) => system.key === saved) ? saved : "sayc";
+    } catch { return "sayc"; }
+  }
+  function rememberBiddingSystem(key) {
+    try { localStorage.setItem(BIDDING_SYSTEM_KEY, key); } catch { /* 私密模式沒有儲存空間也沒關係 */ }
+  }
+  function biddingSystemSelect(current) {
+    const select = document.createElement("select");
+    select.className = "system-select";
+    select.setAttribute("aria-label", "叫牌制度");
+    for (const system of BIDDING_SYSTEMS) {
+      const option = document.createElement("option");
+      option.value = system.key;
+      option.textContent = system.label;
+      option.selected = system.key === current;
+      select.append(option);
+    }
+    return select;
+  }
+  const systemShort = (key) => BIDDING_SYSTEMS.find((system) => system.key === key)?.short ?? key;
   const tokens = readTokenMap();
   const requestedTableId = new URL(window.location.href).searchParams.get("table") || "";
   const soleTableId = Object.keys(tokens).length === 1 ? Object.keys(tokens)[0] : "";
@@ -32,7 +62,7 @@
       "seatCount", "roster", "chatLog", "chatForm", "chatInput", "statusLine", "passphraseLabel", "createPassphrase", "adminKeyLabel", "adminKey",
       "managementPanel", "managementList", "managedTableCount", "managementHint", "refreshTables", "backToTables", "leaveTable",
       "lobbyPanel", "lobbyList", "lobbyCount", "lobbyHint",
-      "tableStatus", "roundCelebration", "roundCelebrationAnimation", "roundCelebrationLabel", "gameModeLabel", "gameMode", "ruleOptionFields", "ruleOptions", "tableName", "railToggle", "rail", "railClose", "railBackdrop", "handDock", "seatButton", "chairPicker", "unseatButton", "acceptSubstitute", "dockNote", "spectatorList", "spectatorCount",
+      "tableStatus", "roundCelebration", "roundCelebrationAnimation", "roundCelebrationLabel", "gameModeLabel", "gameMode", "ruleOptionFields", "ruleOptions", "tableName", "railToggle", "rail", "railClose", "railBackdrop", "handDock", "seatButton", "chairPicker", "systemNote", "unseatButton", "acceptSubstitute", "dockNote", "spectatorList", "spectatorCount",
     ].map((id) => [id, document.getElementById(id)]),
   );
 
@@ -651,16 +681,50 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
   function renderChairPicker(table, visible) {
     elements.chairPicker.hidden = !visible;
     if (!visible) return;
-    elements.chairPicker.replaceChildren(...table.chairs.map((chair) => {
+    // 合約橋牌入座前先選制度；宣告是公開的，搭檔不同只會提醒。
+    const systemSelect = table.mode === "bridge" ? biddingSystemSelect(savedBiddingSystem()) : null;
+    const seatBody = (position) => systemSelect ? { position, bidding_system: systemSelect.value } : { position };
+    const pieces = table.chairs.map((chair) => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = `chair-button${chair.name ? " taken" : ""}`;
       button.dataset.position = String(chair.position);
       button.disabled = state.busy || chair.name !== null;
       button.textContent = chair.name ? `${chair.chair}｜${chair.name}` : `坐${chair.chair}`;
-      button.addEventListener("click", () => void changeSeat("/api/human/seat", `已坐${chair.chair}，等房主開局。`, { position: chair.position }));
+      button.addEventListener("click", () => {
+        if (systemSelect) rememberBiddingSystem(systemSelect.value);
+        void changeSeat("/api/human/seat", `已坐${chair.chair}，等房主開局。`, seatBody(chair.position));
+      });
       return button;
-    }));
+    });
+    if (systemSelect) {
+      const label = document.createElement("label");
+      label.className = "system-label";
+      label.append("你的叫牌制度 ", systemSelect);
+      pieces.unshift(label);
+    }
+    elements.chairPicker.replaceChildren(...pieces);
+  }
+
+  /** 入座後改制度：送 /api/human/system，宣告隨時可改、不動牌局。 */
+  async function setBiddingSystem(key) {
+    rememberBiddingSystem(key);
+    await run(async () => {
+      const result = await api("/api/human/system", { method: "POST", body: { bidding_system: key, idempotency_key: operationKey("human-system") } });
+      setTable(result.table);
+      setStatus(`已宣告制度：${systemShort(key)}。`);
+    });
+  }
+
+  /** 合約橋牌：自己與搭檔的制度不同時提醒一句，協調交給聊天室。 */
+  function renderSystemNote(table) {
+    const you = table.players.find((seat) => seat.is_you);
+    const partner = you && table.mode === "bridge" && you.position !== null
+      ? table.players.find((seat) => seat.position !== null && (seat.position + 2) % 4 === you.position)
+      : null;
+    const mismatch = Boolean(you && partner && you.bidding_system && partner.bidding_system && you.bidding_system !== partner.bidding_system);
+    elements.systemNote.hidden = !mismatch;
+    if (mismatch) elements.systemNote.textContent = `你打 ${systemShort(you.bidding_system)}、搭檔 ${partner.name} 打 ${systemShort(partner.bidding_system)}，制度不同，先在聊天室橋一下。`;
   }
 
   function syncActionButtons(table) {
@@ -668,6 +732,7 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     const canSit = table.legal_actions.includes("take_seat");
     elements.seatButton.hidden = !canSit || table.chairs !== null;
     renderChairPicker(table, canSit && table.chairs !== null);
+    renderSystemNote(table);
     elements.unseatButton.hidden = !table.legal_actions.includes("leave_seat");
     elements.acceptSubstitute.hidden = !table.legal_actions.includes("accept_substitute");
     elements.acceptSubstitute.disabled = state.busy;
@@ -980,6 +1045,7 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     }
     const calls = document.createElement("div");
     calls.className = "bidding-calls";
+    if (table.mode === "bridge" && (table.legal_actions.includes("bid") || table.legal_actions.includes("pass"))) wrap.append(bidHintRow(table));
     for (const [action, label] of [["pass", "PASS"], ["redeal", "倒牌"], ["double", "Double"], ["redouble", "Redouble"]]) {
       if (action === "redeal" && !table.legal_actions.includes("redeal")) continue;
       if ((action === "double" || action === "redouble") && !table.rule_options?.doubling) continue;
@@ -993,6 +1059,30 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     }
     wrap.append(grid, calls);
     return wrap;
+  }
+
+  /** 叫品建議：依自己宣告的制度算的一句話，點了直接送出；只是建議，不限制能叫什麼。 */
+  function bidHintRow(table) {
+    const row = document.createElement("div");
+    row.className = "bid-hint";
+    const hint = table.bid_hint;
+    if (!hint) {
+      row.textContent = "這一輪沒有建議";
+      return row;
+    }
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `bid-button call${/[♥♦]/.test(hint.call) ? " red" : ""}`;
+    button.textContent = `建議 ${hint.call}`;
+    button.disabled = state.busy;
+    button.addEventListener("click", () => {
+      const body = hint.call === "PASS" ? { action: "pass", cards: [] } : hint.call === "X" ? { action: "double", cards: [] } : { action: "bid", cards: [hint.call] };
+      void gameWrite("/api/human/action", body);
+    });
+    const reason = document.createElement("span");
+    reason.textContent = hint.reason.replace(/，建議 [^，]+$/, "");   // 按鈕已寫建議的叫品，理由不重複
+    row.append(button, reason);
+    return row;
   }
 
   function renderPickBoard(table) {
@@ -1222,9 +1312,23 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
         const declarerId = declarerOf(table.board);
         const role = !contract ? "" : declarerId === seat.seat_id ? "主打" : contract.dummy_seat_id === seat.seat_id ? "夢家" : "防守";
         const side = table.mode === "bridge" ? bridgeSideLabel(table, seat.seat_id) : "";
+        const system = seat.bidding_system ? systemShort(seat.bidding_system) : "";
         const tricks = table.board.phase === "play" || table.board.phase === "ended" ? `${bridgeTricksFor(table, seat.seat_id)} 墩` : "";
-        chips.textContent = [side, role, tricks].filter(Boolean).join(" · ");
+        chips.textContent = [side, system, role, tricks].filter(Boolean).join(" · ");
         heading.append(chips);
+        if (seat.is_you && seat.bidding_system) {
+          const change = document.createElement("button");
+          change.type = "button";
+          change.className = "seat-reconnect";
+          change.textContent = "改制度";
+          change.addEventListener("click", () => {
+            const select = biddingSystemSelect(seat.bidding_system);
+            select.addEventListener("change", () => void setBiddingSystem(select.value));
+            change.replaceWith(select);
+            select.focus();
+          });
+          heading.append(change);
+        }
       } else if (isLayoutGame(table)) {
         const chips = document.createElement("span");
         chips.className = "captured-chips";

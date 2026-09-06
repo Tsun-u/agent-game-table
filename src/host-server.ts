@@ -1,3 +1,4 @@
+import { isBiddingSystemKey, type BiddingSystemKey } from "./engine/bridge-systems.js";
 import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -181,7 +182,7 @@ async function routeRequest(
     const body = await readJsonBody(request);
     if (method === "POST" && url.pathname === "/api/human/seat") {
       sendJson(response, 200, {
-        table: store.humanTakeSeat(token, requirePositiveInteger(body.expected_version, "expected_version"), requireIdempotencyKey(body.idempotency_key), optionalPosition(body.position)),
+        table: store.humanTakeSeat(token, requirePositiveInteger(body.expected_version, "expected_version"), requireIdempotencyKey(body.idempotency_key), optionalPosition(body.position), optionalBiddingSystem(body.bidding_system)),
       });
       return;
     }
@@ -223,6 +224,10 @@ async function routeRequest(
           requireCardList(body.cards),
         ),
       });
+      return;
+    }
+    if (method === "POST" && url.pathname === "/api/human/system") {
+      sendJson(response, 200, { table: store.humanSetBiddingSystem(token, body.bidding_system, requireIdempotencyKey(body.idempotency_key)) });
       return;
     }
     if (method === "POST" && url.pathname === "/api/human/say") {
@@ -291,7 +296,7 @@ async function routeRequest(
     const body = await readJsonBody(request);
     if (method === "POST" && url.pathname === "/api/agent/seat") {
       sendJson(response, 200, {
-        table: store.agentTakeSeat(token, requirePositiveInteger(body.expected_version, "expected_version"), requireIdempotencyKey(body.idempotency_key), optionalPosition(body.position)),
+        table: store.agentTakeSeat(token, requirePositiveInteger(body.expected_version, "expected_version"), requireIdempotencyKey(body.idempotency_key), optionalPosition(body.position), optionalBiddingSystem(body.bidding_system)),
       });
       return;
     }
@@ -323,6 +328,10 @@ async function routeRequest(
           requireCardList(body.cards),
         ),
       });
+      return;
+    }
+    if (method === "POST" && url.pathname === "/api/agent/system") {
+      sendJson(response, 200, { table: store.agentSetBiddingSystem(token, body.bidding_system, requireIdempotencyKey(body.idempotency_key)) });
       return;
     }
     if (method === "POST" && url.pathname === "/api/agent/say") {
@@ -418,6 +427,13 @@ function requireCardList(value: unknown): string[] {
 
 function requirePositiveInteger(value: unknown, field: string): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 1) throw new Error(`${field} 必須是正整數。`);
+  return value;
+}
+
+/** 入座時宣告的叫牌制度（只有合約橋牌用到）：沒帶就交給牌桌層用記住的或預設。 */
+function optionalBiddingSystem(value: unknown): BiddingSystemKey | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!isBiddingSystemKey(value)) throw new Error("bidding_system 必須是 sayc、taiwan_5533 或 taiwan_5542。");
   return value;
 }
 

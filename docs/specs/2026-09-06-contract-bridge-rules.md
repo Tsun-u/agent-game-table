@@ -147,6 +147,7 @@ interface BridgeState {
 - 第一版覆蓋範圍：**開叫**（含 PASS）、**對搭檔開叫的第一次應叫**（1 線花色應叫、1NT 應叫含 Stayman 與 Jacoby 轉換、加叫、2 線以上）、**對開叫者的第一次再叫**、**爭叫**（一線花色蓋叫、1NT 蓋叫、技術性 Double）。超出範圍回 null，前端顯示「這一輪沒有建議」。
 - 理由用一句人話：「13 點、五張黑桃，開叫 1♠」「8 點、四張紅心，Stayman 問高花」。
 - 提示是建議，`legal_plays` 不因它變動；Agent 可以無視。
+- 實作：`docs/plans/2026-09-06-bridge-hints.md`；規則數字摘要 `docs/research/2026-09-06-sayc-reference.md`。
 
 ## 六、前端（阿宇做）
 

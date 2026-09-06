@@ -13,7 +13,8 @@ export interface AgentGameTableAgentHost {
     cards?: readonly string[],
   ): Promise<PublicTableView>;
   agentSay(agentToken: string, message: string, idempotencyKey: string): Promise<PublicTableView>;
-  takeSeat(agentToken: string, expectedVersion: number, idempotencyKey: string, position?: number): Promise<PublicTableView>;
+  takeSeat(agentToken: string, expectedVersion: number, idempotencyKey: string, position?: number, biddingSystem?: string): Promise<PublicTableView>;
+  setBiddingSystem(agentToken: string, biddingSystem: string, idempotencyKey: string): Promise<PublicTableView>;
   leaveSeat(agentToken: string, expectedVersion: number, idempotencyKey: string): Promise<PublicTableView>;
   inviteSubstitute(agentToken: string, targetSeatId: string, expectedVersion: number, idempotencyKey: string): Promise<PublicTableView>;
   acceptSubstitute(agentToken: string, expectedVersion: number, idempotencyKey: string): Promise<PublicTableView>;
@@ -75,9 +76,9 @@ export class AgentGameTableHostClient implements AgentGameTableAgentHost {
     return result.table;
   }
 
-  async takeSeat(agentToken: string, expectedVersion: number, idempotencyKey: string, position?: number): Promise<PublicTableView> {
+  async takeSeat(agentToken: string, expectedVersion: number, idempotencyKey: string, position?: number, biddingSystem?: string): Promise<PublicTableView> {
     const result = await this.#request<{ table: PublicTableView }>("/api/agent/seat", {
-      method: "POST", token: agentToken, body: { expected_version: expectedVersion, idempotency_key: idempotencyKey, position },
+      method: "POST", token: agentToken, body: { expected_version: expectedVersion, idempotency_key: idempotencyKey, position, bidding_system: biddingSystem },
     });
     return result.table;
   }
@@ -99,6 +100,13 @@ export class AgentGameTableHostClient implements AgentGameTableAgentHost {
   async acceptSubstitute(agentToken: string, expectedVersion: number, idempotencyKey: string): Promise<PublicTableView> {
     const result = await this.#request<{ table: PublicTableView }>("/api/agent/accept-substitute", {
       method: "POST", token: agentToken, body: { expected_version: expectedVersion, idempotency_key: idempotencyKey },
+    });
+    return result.table;
+  }
+
+  async setBiddingSystem(agentToken: string, biddingSystem: string, idempotencyKey: string): Promise<PublicTableView> {
+    const result = await this.#request<{ table: PublicTableView }>("/api/agent/system", {
+      method: "POST", token: agentToken, body: { bidding_system: biddingSystem, idempotency_key: idempotencyKey },
     });
     return result.table;
   }

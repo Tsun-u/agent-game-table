@@ -75,3 +75,22 @@ test("an encrypted state file rejects the wrong key", async (context) => {
     /無法解密/,
   );
 });
+
+test("a principal's declared bidding system survives a restart and seeds the next bridge table", async (context) => {
+  const directory = await mkdtemp(join(tmpdir(), "agent-game-table-systems-"));
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  const path = join(directory, "tables.enc.json");
+  const stateKey = generateStateKey();
+  const store = new MultiplayerTableStore(() => createDeck(), { persistence: new EncryptedFileTablePersistence(path, stateKey) });
+  const first = store.createTable("阿童", undefined, "bridge");
+  const joined = store.joinAgentForPrincipal(first.table.join_code, "小葵", "static:xiaokui");
+  store.agentTakeSeat(joined.agent_token, tableVersion(store, first.human_token), "systems-seat-01", 1, "taiwan_5542");
+
+  const restored = new MultiplayerTableStore(() => createDeck(), { persistence: new EncryptedFileTablePersistence(path, stateKey) });
+  assert.equal(restored.getAgentView(joined.agent_token).players[0]!.bidding_system, "taiwan_5542", "seat declaration is restored");
+  restored.leaveAgent(joined.agent_token);
+  const second = restored.createTable("阿童", undefined, "bridge");
+  const rejoined = restored.joinAgentForPrincipal(second.table.join_code, "小葵", "static:xiaokui");
+  const view = restored.agentTakeSeat(rejoined.agent_token, tableVersion(restored, second.human_token), "systems-seat-02");
+  assert.equal(view.players[0]!.bidding_system, "taiwan_5542", "the remembered system seeds the next table");
+});

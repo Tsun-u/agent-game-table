@@ -401,3 +401,40 @@ test("沒有椅子的遊戲忽略位置參數", () => {
   assert.equal(view.players[0]!.position, null);
   assert.equal(view.chairs, null);
 });
+
+test("合約橋牌：入座宣告制度、可改、觀戰者不能宣告，其他遊戲沒有制度", () => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  const owner = store.createTable("房主", undefined, "bridge");
+  const agent = store.joinAgent(owner.table.join_code, "阿宇");
+  assert.throws(() => store.agentSetBiddingSystem(agent.agent_token, "sayc", "sys-spectator-01"), /先入座/);
+  let view = store.humanTakeSeat(owner.human_token, tableVersion(store, owner.human_token), "sys-seat-owner", 0);
+  assert.equal(view.players[0]!.bidding_system, "sayc", "沒帶就是預設 SAYC");
+  view = store.agentTakeSeat(agent.agent_token, tableVersion(store, owner.human_token), "sys-seat-agent", 2, "taiwan_5542");
+  assert.deepEqual(view.players.map((seat) => seat.bidding_system), ["sayc", "taiwan_5542"]);
+  assert.match(view.players[1]!.bidding_system_label ?? "", /5542/);
+  assert.throws(() => store.agentSetBiddingSystem(agent.agent_token, "precision", "sys-bad-value-01"), /叫牌制度要是/);
+  view = store.agentSetBiddingSystem(agent.agent_token, "taiwan_5533", "sys-change-agent");
+  assert.equal(view.players[1]!.bidding_system, "taiwan_5533");
+  assert.equal(view.bid_hint, null, "還沒開局沒有建議");
+
+  const bigtwo = store.createTable("房主二");
+  const seated = store.humanTakeSeat(bigtwo.human_token, tableVersion(store, bigtwo.human_token), "sys-bigtwo-seat", 0, "sayc");
+  assert.equal(seated.players[0]!.bidding_system, null, "大老二不記制度");
+  assert.throws(() => store.humanSetBiddingSystem(bigtwo.human_token, "sayc", "sys-bigtwo-set"), /只有合約橋牌/);
+});
+
+test("合約橋牌：叫牌階段只有輪到的人拿到 bid_hint，而且建議一定合法", () => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  const owner = store.createTable("房主", undefined, "bridge");
+  const tokens = [owner.human_token, ...["東", "南", "西"].map((name) => store.joinHuman(owner.table.join_code, name).human_token)];
+  for (const [position, token] of tokens.entries()) store.humanTakeSeat(token, tableVersion(store, owner.human_token), `hint-seat-${position}`, position);
+  store.startRound(owner.human_token, tableVersion(store, owner.human_token), "hint-start-01");
+  const dealer = store.getHumanView(owner.human_token);
+  assert.equal(dealer.legal_actions.includes("bid"), true);
+  assert.notEqual(dealer.bid_hint, null, "輪到的人有建議");
+  const hint = dealer.bid_hint!;
+  const legal = hint.call === "PASS" ? dealer.legal_actions.includes("pass") : dealer.legal_plays.some((play) => play.cards[0] === hint.call);
+  assert.equal(legal, true, `建議 ${hint.call} 要在合法清單裡`);
+  assert.match(hint.reason, /點/);
+  assert.equal(store.getHumanView(tokens[1]!).bid_hint, null, "還沒輪到的人沒有建議");
+});
