@@ -912,10 +912,17 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     const shown = showLast ? board.last_trick.plays : plays;
     const leaderSeatId = showLast ? shown[0]?.seat_id : board.trick?.leader_seat_id;
     const trick = document.createElement("div");
-    trick.className = `bridge-trick${showLast ? " last" : ""}`;
+    trick.className = `bridge-trick${showLast ? " last" : ""}${table.mode === "bridge" ? " compass" : ""}`;
+    // 合約橋牌：四張牌照方位擺，自己永遠在下方（觀戰者以南為下）。
+    const youPosition = table.players.find((seat) => seat.is_you)?.position ?? 2;
+    const slotOf = (seatId) => {
+      const position = table.players.find((seat) => seat.seat_id === seatId)?.position ?? 0;
+      return ["n", "e", "s", "w"][(position - youPosition + 6) % 4];
+    };
     trick.append(...shown.map((play, index) => {
       const wrap = document.createElement("div");
       wrap.className = `trick-play${play.seat_id === leaderSeatId ? " leader" : ""}`;
+      if (table.mode === "bridge") wrap.dataset.slot = slotOf(play.seat_id);
       wrap.append(cardElement(play.card, showLast ? -1 : index));
       const label = document.createElement("small");
       label.textContent = nameOf(play.seat_id);

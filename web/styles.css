@@ -453,8 +453,18 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
 .bridge-stock small { color: var(--muted); font-size: 0.78rem; }
 .bridge-trick { display: flex; gap: 12px; min-height: 108px; align-items: center; }
 .bridge-trick.last { opacity: 0.55; }
-.bridge-dummy { display: grid; gap: 4px; padding: 6px 10px; border: 1px dashed var(--line-strong); border-radius: 10px; width: 100%; }
+/* 合約橋牌的本墩照方位擺：四張牌貼著中心，上下各一張、左右各一張，整塊約 240×230。 */
+.bridge-trick.compass { display: block; position: relative; width: 230px; height: 176px; min-height: 0; }
+.bridge-trick.compass .trick-play { position: absolute; }
+.bridge-trick.compass .playing-card { width: 62px; height: 88px; }
+.bridge-trick.compass .trick-play[data-slot="n"] { top: 0; left: 50%; transform: translateX(-50%); }
+.bridge-trick.compass .trick-play[data-slot="s"] { bottom: 0; left: 50%; transform: translateX(-50%); }
+.bridge-trick.compass .trick-play[data-slot="w"] { left: 0; top: 50%; transform: translateY(-50%); }
+.bridge-trick.compass .trick-play[data-slot="e"] { right: 0; top: 50%; transform: translateY(-50%); }
+.bridge-dummy { display: grid; gap: 2px; padding: 4px 10px; border: 1px dashed var(--line-strong); border-radius: 10px; width: 100%; }
 .bridge-dummy small { color: var(--muted); font-size: 0.78rem; }
+.bridge-dummy .cards.compact { justify-content: center; padding-left: 22px; }
+.bridge-dummy .cards.compact .playing-card { flex: 0 0 62px; width: 62px; height: 88px; margin-left: -22px; }
 .bid-log th.vulnerable { color: #c62828; }
 .pile-cards.last-trick .trick-play { opacity: 0.55; }
 .playing-card.just-drawn { animation: just-drawn 1.2s ease-out; }

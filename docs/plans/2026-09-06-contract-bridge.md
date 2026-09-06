@@ -2,7 +2,7 @@
 
 > **給執行者：** 使用「執行計畫」skill 逐步完成此計畫。步驟使用 checkbox（`- [ ]`）格式追蹤進度。
 > 規則依據：`docs/specs/2026-09-06-contract-bridge-rules.md` 第三節（童童 2026-09-06 六項答覆，第八節取捨照預設做）。引擎介面：`src/engine/types.ts`；同型範本：`src/engine/lightbridge-engine.ts`、`lightbridge-rules.ts`、`test/lightbridge-engine.test.ts`（四人叫牌、賭倍、重發、規則文字的寫法直接沿用；`BIDS`／`bidRank`／`bidLevel`／`bidStrain` 從 `honeymoon-rules.ts` 匯入）；共用工具：`src/engine/trick-taking-core.ts`；椅子常數 `CHAIRS` 在 `types.ts`。
-> 執行紀錄：2026-09-06 完成。小葵 44 測試一次過、review 無需修改（她指出規則文件的計分簽名與計畫不一，文件改成四參數版）；全套 227＋e2e 4 全過；API 腳本跑過一般局、四家全 PASS 同人重發、Double 倒 4 墩、四局制第 2 局東西有身價、賭倍關不掉；Chrome 看到夢家攤牌與莊家代出（docs/screenshots/bridge-dummy.png）。取捨：本墩維持橫排＋名字（跟輕橋牌同款），沒改成十字排。
+> 執行紀錄：2026-09-06 完成。小葵 44 測試一次過、review 無需修改（她指出規則文件的計分簽名與計畫不一，文件改成四參數版）；全套 227＋e2e 4 全過；API 腳本跑過一般局、四家全 PASS 同人重發、Double 倒 4 墩、四局制第 2 局東西有身價、賭倍關不掉；Chrome 看到夢家攤牌與莊家代出（docs/screenshots/bridge-dummy.png）。本墩起初維持橫排，童童同晚要求改成十字排（照方位擺、自己在下方），已補（docs/screenshots/bridge-compass-trick.png）。
 > 分工：任務 1～3 派小葵（只碰列出的檔案，不 commit 不 push）；任務 4～6 阿宇自己做。制度宣告與叫品提示不在這份（`docs/plans/2026-09-06-bridge-hints.md`）。
 
 **目標：** 大廳可以開 4 人的合約橋牌桌：北南對東西、叫牌合法性由伺服器管、莊家是主打方最先叫出合約花色的人、首攻後夢家攤牌並由莊家操作、複式計分表含身價（無身價／四局制）、賭倍預設開。
