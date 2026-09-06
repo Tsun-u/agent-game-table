@@ -112,6 +112,44 @@ function response(open: string, h: Hand): BidHint | null {
   return hint("PASS", "未符合應叫條件");
 }
 
+function weakTwoResponse(open: string, h: Hand): BidHint {
+  const { hcp: p, lengths: n, sorted, cards, hint } = h;
+  const w = bidStrain(open) as Suit;
+  if (n[w] >= 3 && p >= 14) return hint(`${major(w) ? 4 : 5}${w}`, `${cards(w)}支持、直接叫成局`);
+  if (n[w] >= 3 && p < 14) return hint(`3${w}`, `${cards(w)}支持、阻擊性加叫`);
+  if (p >= 15) return hint("2NT", `${cards(w)}、問特徵，有成局興趣`);
+  const long = sorted.find((s) => s !== w && n[s] >= 5);
+  if (p >= 14 && long) return hint(lowest(long, open), `${cards(long)}、RONF 逼叫一輪`);
+  return hint("PASS", `${cards(w)}、不夠成局，弱二就讓它打`);
+}
+
+function doubledOpeningResponse(open: string, h: Hand): BidHint {
+  const { hcp: p, lengths: n, cards, hint } = h;
+  const s = bidStrain(open) as Suit;
+  if (n[s] >= 3 && p >= 10) return hint("2NT", `${cards(s)}支持、限制性加叫或更好`);
+  if (n[s] >= 4 && p < 10) return hint(`3${s}`, `${cards(s)}支持、阻擊性加叫`);
+  if (n[s] >= 3 && between(p, 6, 9)) return hint(`2${s}`, `${cards(s)}支持`);
+  const m = (["♥", "♠"] as const).find((t) => n[t] >= 4 && bidRank(`1${t}`) > bidRank(open));
+  if (p >= 6 && m) return hint(`1${m}`, `${cards(m)}、一線高花往上叫`);
+  if (p >= 10) return hint("XX", `${cards(s)}、10 點以上沒有配合，Redouble`);
+  if (between(p, 6, 9)) return hint("1NT", `${cards(s)}、沒有配合`);
+  return hint("PASS", `${cards(s)}、未符合應叫條件`);
+}
+
+function takeoutDoubleResponse(open: string, h: Hand): BidHint {
+  const { hcp: p, lengths: n, balanced, sorted, cards, hint } = h;
+  const o = bidStrain(open) as Suit;
+  if (p >= 12) return hint(`2${o}`, `${cards(o)}、叫對手花色，逼叫成局`);
+  if (balanced && n[o] >= 2) {
+    if (between(p, 11, 12)) return hint("2NT", `平均牌型、${cards(o)}`);
+    if (between(p, 6, 10)) return hint("1NT", `平均牌型、${cards(o)}`);
+  }
+  const long = sorted.find((s) => s !== o)!;
+  const minimum = lowest(long, open);
+  if (between(p, 9, 11)) return hint(`${bidLevel(minimum) + 1}${long}`, `${cards(long)}、未叫花色跳一線`);
+  return hint(minimum, `${cards(long)}、搭檔 Double 不能 PASS`);
+}
+
 function rebid(open: string, reply: string, h: Hand): BidHint | null {
   const { hcp: p, lengths: n, balanced, sorted, cards, hint } = h;
   const s = bidStrain(open), t = bidStrain(reply);
@@ -175,6 +213,7 @@ function overcall(open: string, highest: string, h: Hand): BidHint | null {
 
 export function suggestCall(system: BiddingSystemKey, hand: readonly string[], auction: readonly AuctionCall[], order: readonly string[], viewerSeatId: string): BidHint | null {
   const partner = order[(order.indexOf(viewerSeatId) + 2) % 4]!;
+  const rightOpponent = order[(order.indexOf(viewerSeatId) + 3) % 4]!;
   const opponent = (seat: string) => seat !== viewerSeatId && seat !== partner;
   const bids = auction.filter((a) => bidRank(a.call) >= 0);
   const first = bids[0];
@@ -182,8 +221,18 @@ export function suggestCall(system: BiddingSystemKey, hand: readonly string[], a
   const partners = auction.filter((a) => a.seatId === partner);
   const highest = bids.reduce<AuctionCall | undefined>((best, a) => !best || bidRank(a.call) > bidRank(best.call) ? a : best, undefined);
   const h = evaluate(hand);
+  const afterOpening = first ? auction.slice(auction.indexOf(first)) : [];
+  const rightPassed = afterOpening.at(-1)?.seatId === rightOpponent && afterOpening.at(-1)?.call === "PASS";
+  const oneSuitOpening = first && bidLevel(first.call) === 1 && isSuit(bidStrain(first.call));
   let result: BidHint | null = null;
   if (!first) result = opening(system, h);
+  else if (first.seatId === partner && mine.length === 0 && partners.length === 1 && afterOpening.length === 2 && rightPassed && ["2♦", "2♥", "2♠"].includes(first.call)) {
+    result = weakTwoResponse(first.call, h);
+  } else if (first.seatId === partner && oneSuitOpening && mine.length === 0 && auction.length === 2 && auction[1]!.seatId === rightOpponent && auction[1]!.call === "X") {
+    result = doubledOpeningResponse(first.call, h);
+  } else if (opponent(first.seatId) && oneSuitOpening && mine.length === 0 && afterOpening.length === 3 && partners.length === 1 && afterOpening[1]!.seatId === partner && afterOpening[1]!.call === "X" && rightPassed) {
+    result = takeoutDoubleResponse(first.call, h);
+  }
   else if (auction.some((a) => a.call === "X" || a.call === "XX")) return null;
   else if (first.seatId === partner && mine.length === 0 && partners.length === 1) result = response(first.call, h);
   else if (first.seatId === viewerSeatId && mine.length === 1 && partners.length === 1 && bidRank(partners[0]!.call) >= 0 && auction.every((a) => !opponent(a.seatId) || a.call === "PASS")) {
@@ -192,9 +241,11 @@ export function suggestCall(system: BiddingSystemKey, hand: readonly string[], a
     result = overcall(first.call, highest!.call, h);
   }
   if (!result || result.call === "PASS") return result;
-  if (result.call === "X") {
-    const doubled = auction.slice(auction.indexOf(highest!) + 1).some((a) => a.call === "X" || a.call === "XX");
-    return highest && opponent(highest.seatId) && !doubled ? result : null;
+  if (result.call === "X" || result.call === "XX") {
+    if (!highest) return null;
+    const doubling = auction.slice(auction.indexOf(highest) + 1).filter((a) => a.call === "X" || a.call === "XX").at(-1);
+    if (result.call === "X") return opponent(highest.seatId) && !doubling ? result : null;
+    return !opponent(highest.seatId) && doubling?.call === "X" && opponent(doubling.seatId) ? result : null;
   }
   return bidRank(result.call) >= 0 && bidRank(result.call) > (highest ? bidRank(highest.call) : -1) ? result : null;
 }

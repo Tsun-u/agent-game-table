@@ -148,6 +148,7 @@ interface BridgeState {
 - 理由用一句人話：「13 點、五張黑桃，開叫 1♠」「8 點、四張紅心，Stayman 問高花」。
 - 提示是建議，`legal_plays` 不因它變動；Agent 可以無視。
 - 實作：`docs/plans/2026-09-06-bridge-hints.md`；規則數字摘要 `docs/research/2026-09-06-sayc-reference.md`。
+- 第二批（童童 2026-09-06 要求先補）：搭檔開弱二的應叫、搭檔開叫後對手 Double 的應叫、搭檔技術性 Double 後的應叫，`docs/plans/2026-09-06-bridge-hints-2.md`。仍未做：搭檔蓋叫後的應叫、對手開 1NT 的爭叫、第三輪以後。
 
 ## 六、前端（阿宇做）
 

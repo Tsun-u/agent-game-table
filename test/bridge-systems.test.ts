@@ -200,11 +200,11 @@ cases("scope and legality", [
   { name: "interference equal to suggestion", p: 7, shape: [4, 2, 4, 3], expected: null, calls: ["1♥", "1♠"], start: 2 },
   { name: "interference still legal", p: 13, shape: [4, 3, 3, 3], expected: "2NT", calls: ["1♠", "2♦"], start: 2 },
   { name: "third turn", p: 14, shape: [5, 3, 3, 2], expected: null, calls: ["1♠", "PASS", "2♠", "PASS", "3♠", "PASS", "4♠", "PASS"] },
-  { name: "weak two response", p: 14, shape: [5, 3, 3, 2], expected: null, calls: ["2♥", "PASS"], start: 2 },
+  { name: "weak two response", p: 14, shape: [5, 3, 3, 2], expected: "4♥", calls: ["2♥", "PASS"], start: 2 },
   { name: "opponent NT", p: 16, shape: [3, 3, 4, 3], expected: null, calls: ["1NT"], start: 3 },
   { name: "opponent strong club", p: 16, shape: [3, 3, 4, 3], expected: null, calls: ["2♣"], start: 3 },
-  { name: "response to takeout double", p: 13, shape: [4, 4, 1, 4], expected: null, calls: ["1♦", "X", "PASS"], start: 1 },
-  { name: "already doubled", p: 13, shape: [4, 4, 1, 4], expected: null, calls: ["1♦", "X", "PASS"], start: 1 },
+  { name: "partner second utterance after opening doubled", p: 13, shape: [4, 4, 1, 4], expected: null, calls: ["1♦", "X", "PASS", "PASS", "2♦", "PASS"], start: 2 },
+  { name: "opener rebid after double", p: 13, shape: [4, 4, 1, 4], expected: null, calls: ["1♦", "X", "1♥", "PASS"] },
   { name: "redoubled", p: 13, shape: [4, 4, 1, 4], expected: null, calls: ["1♦", "X", "XX"], start: 1 },
   { name: "response to partner overcall", p: 13, shape: [4, 4, 1, 4], expected: null, calls: ["1♦", "1♥", "PASS"], start: 1 },
   { name: "competitive opener rebid", p: 14, shape: [5, 3, 3, 2], expected: null, calls: ["1♠", "2♣", "2♠", "PASS"] },
@@ -214,6 +214,87 @@ cases("scope and legality", [
   { name: "unsupported jump new suit reply", p: 14, shape: [5, 3, 3, 2], expected: null, calls: ["1♠", "PASS", "3♣", "PASS"] },
   { name: "illegal rebid filtered without substituting", p: 14, shape: [2, 6, 3, 2], expected: null, calls: ["1♥", "PASS", "2♠", "PASS"] },
 ]);
+
+cases("weak two response", [
+  { name: "fifteen three hearts game", p: 15, shape: [4, 3, 3, 3], expected: "4♥" },
+  { name: "eight three hearts preempt", p: 8, shape: [4, 3, 3, 3], expected: "3♥" },
+  { name: "sixteen two hearts feature ask", p: 16, shape: [4, 2, 4, 3], expected: "2NT" },
+  { name: "fourteen five spades RONF", p: 14, shape: [5, 2, 3, 3], expected: "2♠" },
+  { name: "ten without support pass", p: 10, shape: [4, 2, 4, 3], expected: "PASS" },
+  { name: "diamonds game at five", p: 15, shape: [4, 3, 3, 3], expected: "5♦", calls: ["2♦", "PASS"] },
+  { name: "spades game at four", p: 14, shape: [3, 4, 3, 3], expected: "4♠", calls: ["2♠", "PASS"] },
+  { name: "zero support still preempts", p: 0, shape: [4, 3, 3, 3], expected: "3♥" },
+  { name: "thirteen support preempts", p: 13, shape: [4, 3, 3, 3], expected: "3♥" },
+  { name: "fourteen support precedes new suit", p: 14, shape: [5, 3, 3, 2], expected: "4♥" },
+  { name: "fifteen feature ask precedes new suit", p: 15, shape: [5, 2, 3, 3], expected: "2NT" },
+  { name: "fourteen without long suit pass", p: 14, shape: [4, 2, 4, 3], expected: "PASS" },
+  { name: "RONF clubs lowest is three", p: 14, shape: [3, 2, 3, 5], expected: "3♣" },
+  { name: "RONF equal minors choose diamonds", p: 14, shape: [1, 2, 5, 5], expected: "3♦" },
+  { name: "right opponent overcall unsupported", p: 15, shape: [4, 3, 3, 3], expected: null, calls: ["2♥", "2♠"] },
+  { name: "right opponent double unsupported", p: 15, shape: [4, 3, 3, 3], expected: null, calls: ["2♥", "X"] },
+  { name: "missing right pass unsupported", p: 15, shape: [4, 3, 3, 3], expected: null, calls: ["2♥"] },
+  { name: "passed hand not first utterance", p: 15, shape: [4, 3, 3, 3], expected: null, calls: ["PASS", "PASS", "2♥", "PASS"], start: 0 },
+], { calls: ["2♥", "PASS"], start: 2 });
+
+cases("doubled opening response", [
+  { name: "eleven three spades limit or better", p: 11, shape: [3, 3, 4, 3], expected: "2NT" },
+  { name: "seven four spades preempt", p: 7, shape: [4, 3, 3, 3], expected: "3♠" },
+  { name: "eight three spades raise", p: 8, shape: [3, 3, 4, 3], expected: "2♠" },
+  { name: "seven four spades over hearts", p: 7, shape: [4, 2, 4, 3], expected: "1♠", calls: ["1♥", "X"] },
+  { name: "eleven no fit redouble", p: 11, shape: [2, 3, 4, 4], expected: "XX" },
+  { name: "seven balanced no fit NT", p: 7, shape: [2, 3, 4, 4], expected: "1NT" },
+  { name: "four pass", p: 4, shape: [2, 3, 4, 4], expected: "PASS" },
+  { name: "ten support precedes redouble", p: 10, shape: [3, 3, 4, 3], expected: "2NT" },
+  { name: "zero four support preempts", p: 0, shape: [4, 3, 3, 3], expected: "3♠" },
+  { name: "five three support passes", p: 5, shape: [3, 3, 4, 3], expected: "PASS" },
+  { name: "six three support raises", p: 6, shape: [3, 3, 4, 3], expected: "2♠" },
+  { name: "ten no fit redoubles", p: 10, shape: [2, 3, 4, 4], expected: "XX" },
+  { name: "one-level major precedes redouble", p: 11, shape: [4, 2, 4, 3], expected: "1♠", calls: ["1♥", "X"] },
+  { name: "four-four majors go up hearts first", p: 7, shape: [4, 4, 3, 2], expected: "1♥", calls: ["1♣", "X"] },
+  { name: "three clubs support is sufficient", p: 10, shape: [4, 4, 2, 3], expected: "2NT", calls: ["1♣", "X"] },
+  { name: "NT opening double unsupported", p: 11, shape: [2, 3, 4, 4], expected: null, calls: ["1NT", "X"] },
+  { name: "two-level opening double unsupported", p: 11, shape: [2, 3, 4, 4], expected: null, calls: ["2♣", "X"] },
+  { name: "auction must be exactly opening double", p: 11, shape: [2, 3, 4, 4], expected: null, calls: ["PASS", "1♠", "X"], start: 1 },
+], { calls: ["1♠", "X"], start: 2 });
+
+cases("takeout double response", [
+  { name: "thirteen cue bid", p: 13, shape: [4, 3, 2, 4], expected: "2♦" },
+  { name: "eleven balanced two diamonds", p: 11, shape: [4, 3, 2, 4], expected: "2NT" },
+  { name: "seven balanced", p: 7, shape: [4, 3, 2, 4], expected: "1NT" },
+  { name: "ten five spades short diamonds jump", p: 10, shape: [5, 3, 1, 4], expected: "2♠" },
+  { name: "three four hearts", p: 3, shape: [3, 4, 3, 3], expected: "1♥" },
+  { name: "zero longest clubs", p: 0, shape: [3, 3, 2, 5], expected: "2♣" },
+  { name: "twelve balanced cue precedes NT", p: 12, shape: [4, 3, 2, 4], expected: "2♦" },
+  { name: "ten balanced NT precedes jump", p: 10, shape: [4, 3, 2, 4], expected: "1NT" },
+  { name: "nine unbalanced jump", p: 9, shape: [5, 3, 1, 4], expected: "2♠" },
+  { name: "eight unbalanced minimum", p: 8, shape: [5, 3, 1, 4], expected: "1♠" },
+  { name: "equal major and minor chooses major", p: 9, shape: [3, 4, 2, 4], expected: "1NT" },
+  { name: "equal major and minor unbalanced jump", p: 9, shape: [2, 5, 1, 5], expected: "2♥" },
+  { name: "equal majors choose spades", p: 3, shape: [4, 4, 2, 3], expected: "1♠" },
+  { name: "longer clubs before shorter major", p: 9, shape: [4, 3, 1, 5], expected: "3♣" },
+  { name: "opening suit excluded even when longest", p: 0, shape: [3, 2, 6, 2], expected: "1♠" },
+  { name: "right opponent redouble unsupported", p: 13, shape: [4, 3, 2, 4], expected: null, calls: ["1♦", "X", "XX"] },
+  { name: "right opponent raises unsupported", p: 13, shape: [4, 3, 2, 4], expected: null, calls: ["1♦", "X", "2♦"] },
+  { name: "NT opponent opening unsupported", p: 13, shape: [4, 3, 2, 4], expected: null, calls: ["1NT", "X", "PASS"] },
+  { name: "two-level opponent opening unsupported", p: 13, shape: [4, 3, 2, 4], expected: null, calls: ["2♦", "X", "PASS"] },
+], { calls: ["1♦", "X", "PASS"], start: 1 });
+
+test("new responses are identical across systems and seat rotations, with immutable inputs", () => {
+  const samples = [
+    { p: 15, shape: [4, 3, 3, 3] as const, calls: ["2♥", "PASS"], offset: 2, expected: "4♥" },
+    { p: 11, shape: [2, 3, 4, 4] as const, calls: ["1♠", "X"], offset: 2, expected: "XX" },
+    { p: 0, shape: [3, 3, 2, 5] as const, calls: ["1♦", "X", "PASS"], offset: 1, expected: "2♣" },
+  ];
+  for (const sample of samples) for (const { key } of BIDDING_SYSTEMS) for (let viewer = 0; viewer < 4; viewer++) {
+    const cards = Object.freeze(hand(sample.p, sample.shape));
+    const history = Object.freeze(auction(sample.calls, (viewer + sample.offset) % 4).map((call) => Object.freeze(call)));
+    const before = JSON.stringify({ cards, history });
+    const result = suggestCall(key, cards, history, order, order[viewer]!);
+    assert.equal(result?.call, sample.expected);
+    assert.deepEqual(suggestCall(key, cards, history, order, order[viewer]!), result);
+    assert.equal(JSON.stringify({ cards, history }), before);
+  }
+});
 
 test("opposite seats use supplied IDs for every rotation and inputs stay unchanged", () => {
   const cards = Object.freeze(hand(13, [4, 3, 3, 3]));

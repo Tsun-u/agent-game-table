@@ -1212,11 +1212,12 @@ function biddingSystemLabel(key: BiddingSystemKey): string {
   return BIDDING_SYSTEMS.find((system) => system.key === key)?.label ?? key;
 }
 
-/** 建議要對得上合法清單才給：叫品要在 legal_plays、PASS 要能 pass、X 要能 double。 */
+/** 建議要對得上合法清單才給：叫品要在 legal_plays、PASS 要能 pass、X／XX 要能 double／redouble。 */
 function legalBidHint(hint: BidHint | null, legalActions: readonly string[], legalPlays: readonly { cards: readonly string[] }[]): BidHint | null {
   if (!hint) return null;
   if (hint.call === "PASS") return legalActions.includes("pass") ? hint : null;
   if (hint.call === "X") return legalActions.includes("double") ? hint : null;
+  if (hint.call === "XX") return legalActions.includes("redouble") ? hint : null;
   return legalPlays.some((play) => play.cards[0] === hint.call) ? hint : null;
 }
 
