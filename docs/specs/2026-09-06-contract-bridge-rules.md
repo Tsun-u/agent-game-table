@@ -74,7 +74,7 @@
 | 倒約（Double） | 第 1 墩 100、第 2～3 墩各 200、第 4 墩起各 300 | 第 1 墩 200、之後各 300 |
 | 倒約（Redouble） | Double 的兩倍 | Double 的兩倍 |
 
-`scoreBridgeRound(contract, declarer, tricksWon, vulnerable, order)` 純函式匯出，回傳 `{ scores, made, detail }`，`detail` 一句算式（例：「4♠X 有身價成約：墩分 240 + 成局 500 + 侮辱分 50 = 790，北南得分」）。
+`scoreBridgeRound(contract, tricksWon, vulnerable, order)` 純函式匯出（`contract` 含 `declarer`），回傳 `{ scores, made, detail }`，`detail` 一句算式（例：「4♠X 有身價成約：墩分 240 + 成局 500 + 侮辱分 50 = 790，北南得分」）。
 
 ### 5. 累積與結束
 

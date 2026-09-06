@@ -448,6 +448,9 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
 .bridge-stock small { color: var(--muted); font-size: 0.78rem; }
 .bridge-trick { display: flex; gap: 12px; min-height: 108px; align-items: center; }
 .bridge-trick.last { opacity: 0.55; }
+.bridge-dummy { display: grid; gap: 4px; padding: 6px 10px; border: 1px dashed var(--line-strong); border-radius: 10px; width: 100%; }
+.bridge-dummy small { color: var(--muted); font-size: 0.78rem; }
+.bid-log th.vulnerable { color: #c62828; }
 .pile-cards.last-trick .trick-play { opacity: 0.55; }
 .playing-card.just-drawn { animation: just-drawn 1.2s ease-out; }
 @keyframes just-drawn {

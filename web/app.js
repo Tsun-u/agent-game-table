@@ -285,7 +285,22 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
   }
 
   /** 雙人橋牌：叫牌格、換牌明牌與本墩都畫在桌面中央，手牌沿用吃墩遊戲的點擊出牌。 */
-  const BRIDGE_MODES = new Set(["honeymoon", "lightbridge"]);
+  const BRIDGE_MODES = new Set(["honeymoon", "lightbridge", "bridge"]);
+  /** 合約橋牌的合約帶 declarer_seat_id／dummy_seat_id，另外兩款橋牌只有 seat_id。 */
+  function declarerOf(board) {
+    return board.contract?.declarer_seat_id ?? board.contract?.seat_id ?? null;
+  }
+  /** 合約橋牌的墩數以隊計（ns／ew），座位 0、2 是北南；另外兩款每人一個數字。 */
+  function bridgeTricksFor(table, seatId) {
+    const won = table.board.tricks_won ?? {};
+    if (table.mode !== "bridge") return won[seatId] ?? 0;
+    const index = table.players.findIndex((seat) => seat.seat_id === seatId);
+    return won[index % 2 === 0 ? "ns" : "ew"] ?? 0;
+  }
+  function bridgeSideLabel(table, seatId) {
+    const index = table.players.findIndex((seat) => seat.seat_id === seatId);
+    return index % 2 === 0 ? "北南" : "東西";
+  }
   function isBridgeGame(table) {
     return BRIDGE_MODES.has(table?.mode);
   }
@@ -445,6 +460,7 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     hearts: "台灣標準（每張紅心 -1、♠Q -13、射月）",
     honeymoon: "橋牌分（不記身價）、不賭倍",
     lightbridge: "合約制（每墩 10 分＋成約獎分）、各家分開算、不賭倍",
+    bridge: "無身價、賭倍、打 4 局",
   };
 
   /** 邀請詞裡給 AI 的出牌指示，動作名依遊戲不同：大老二是 play_cards 可 PASS，吃墩遊戲是 play_card，傷心小棧多一段傳牌。 */
@@ -455,6 +471,7 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     if (mode === "paiqi") return "輪到你時只從 legal_plays 選一筆原樣送出：action 是 play_card 就出牌（兩張代表鬼牌當目標牌），清單只剩 cover_card 就是沒牌可出、挑一張蓋掉；不是你的回合時呼叫 wait_for_table_event。";
     if (mode === "honeymoon") return "叫牌階段從 legal_plays 挑一個叫品送 bid（cards 放那個叫品字串），或在 legal_actions 允許時送 pass／double／redouble；換牌與打牌階段只從 legal_plays 選一張原樣傳給 play_card；不是你的回合時呼叫 wait_for_table_event。";
     if (mode === "lightbridge") return "叫牌階段從 legal_plays 挑一個叫品送 bid（cards 放那個叫品字串），或在 legal_actions 允許時送 pass／redeal（倒牌）／double／redouble；打牌階段只從 legal_plays 選一張原樣傳給 play_card；不是你的回合時呼叫 wait_for_table_event。";
+    if (mode === "bridge") return "叫牌階段從 legal_plays 挑一個叫品送 bid（cards 放那個叫品字串），或在 legal_actions 允許時送 pass／double／redouble；打牌階段只從 legal_plays 選一張原樣傳給 play_card，你是莊家時輪到夢家的回合 legal_plays 會列夢家的牌、一樣照抄送出；不是你的回合時呼叫 wait_for_table_event。";
     return "輪到你時只從 legal_plays 選一組 cards 原樣傳給 play_cards，或在 legal_actions 允許時 PASS；不是你的回合時呼叫 wait_for_table_event。";
   }
 
@@ -809,9 +826,11 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
   function renderBridgeBoard(table) {
     const board = table.board;
     const nameOf = (seatId) => table.players.find((seat) => seat.seat_id === seatId)?.name ?? "";
+    const declarerId = declarerOf(board);
     const contract = board.contract
-      ? `合約 ${board.contract.bid}${DOUBLED_LABEL[board.contract.doubled] ?? ""} · ${nameOf(board.contract.seat_id)} 主打`
+      ? `合約 ${board.contract.bid}${DOUBLED_LABEL[board.contract.doubled] ?? ""} · ${nameOf(declarerId)} 主打${board.contract.dummy_seat_id ? `，${nameOf(board.contract.dummy_seat_id)} 夢家` : ""}`
       : "";
+    const vulnerable = board.vulnerable ? `身價：北南${board.vulnerable.ns ? "有" : "無"}、東西${board.vulnerable.ew ? "有" : "無"}` : "";
     if (board.phase === "bidding") {
       elements.pileCards.replaceChildren(bidLog(table), biddingGrid(table));
       const yourCall = table.legal_actions.includes("bid") || table.legal_actions.includes("pass");
@@ -819,7 +838,7 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
       const hint = yourCall
         ? table.legal_actions.includes("redeal") ? "點一個叫品、PASS，或點力不足可以倒牌" : "點一個叫品，或按 PASS"
         : `叫牌中，等 ${nameOf(table.active_seat_id)}`;
-      elements.pileLabel.textContent = [hcp, hint].filter(Boolean).join(" · ");
+      elements.pileLabel.textContent = [vulnerable, hcp, hint].filter(Boolean).join(" · ");
       return;
     }
     // 兩張到齊時伺服器立刻清空本墩，所以本墩空著就改畫上一墩（淡化），對手跟的那張才看得到。
@@ -850,6 +869,7 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
       pieces.push(stock);
     }
     pieces.push(trick);
+    if (board.dummy_hand) pieces.unshift(dummyArea(table, nameOf));
     elements.pileCards.replaceChildren(...pieces);
 
     const leader = board.trick ? nameOf(board.trick.leader_seat_id) : "";
@@ -864,14 +884,37 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     } else if (board.phase === "play") {
       const won = board.tricks_won ?? {};
       const played = Object.values(won).reduce((sum, count) => sum + count, 0);
-      const declarer = board.contract?.seat_id;
+      const declarer = declarerId;
+      const declarerTricks = declarer ? bridgeTricksFor(table, declarer) : 0;
       const need = board.contract ? 6 + Number.parseInt(board.contract.bid, 10) : 0;
-      const remaining = declarer ? Math.max(0, need - (won[declarer] ?? 0)) : 0;
-      const progress = declarer ? `${nameOf(declarer)} ${won[declarer] ?? 0} 墩，還差 ${remaining} 墩成約` : "";
+      const remaining = declarer ? Math.max(0, need - declarerTricks) : 0;
+      const progress = declarer ? `${table.mode === "bridge" ? bridgeSideLabel(table, declarer) : nameOf(declarer)} ${declarerTricks} 墩，還差 ${remaining} 墩成約` : "";
       elements.pileLabel.textContent = [`第 ${played + 1} 墩`, contract, progress, waiting].filter(Boolean).join(" · ");
     } else {
       elements.pileLabel.textContent = "等待開局";
     }
+  }
+
+  /** 夢家攤牌區：首攻後所有人都看得到；自己是莊家且輪到夢家時，legal_plays 列的是夢家的牌，點了就替夢家出。 */
+  function dummyArea(table, nameOf) {
+    const board = table.board;
+    const wrap = document.createElement("div");
+    wrap.className = "bridge-dummy";
+    const label = document.createElement("small");
+    label.textContent = `夢家 ${nameOf(board.contract?.dummy_seat_id)}`;
+    const cards = document.createElement("div");
+    cards.className = "cards compact";
+    cards.append(...board.dummy_hand.map((code) => {
+      const legal = table.legal_plays.some((play) => play.action === "play_card" && play.cards[0] === code);
+      const card = cardElement(code);
+      if (legal) {
+        card.classList.add("selectable");
+        card.addEventListener("click", () => void gameWrite("/api/human/action", { action: "play_card", cards: [code] }));
+      }
+      return card;
+    }));
+    wrap.append(label, cards);
+    return wrap;
   }
 
   /** 叫牌紀錄：一人一欄，發牌者在最左，依席位順序輪流一列一格。 */
@@ -887,6 +930,8 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     for (const seatId of columns) {
       const cell = document.createElement("th");
       cell.textContent = nameOf(seatId);
+      // 合約橋牌：有身價的隊在欄名標紅。
+      if (board.vulnerable && board.vulnerable[bridgeSideLabel(table, seatId) === "北南" ? "ns" : "ew"]) cell.classList.add("vulnerable");
       head.append(cell);
     }
     log.append(head);
@@ -1174,9 +1219,11 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
         const chips = document.createElement("span");
         chips.className = "captured-chips";
         const contract = table.board.contract;
-        const role = contract ? (contract.seat_id === seat.seat_id ? "主打" : "防守") : "";
-        const tricks = table.board.phase === "play" || table.board.phase === "ended" ? `${table.board.tricks_won?.[seat.seat_id] ?? 0} 墩` : "";
-        chips.textContent = [role, tricks].filter(Boolean).join(" · ");
+        const declarerId = declarerOf(table.board);
+        const role = !contract ? "" : declarerId === seat.seat_id ? "主打" : contract.dummy_seat_id === seat.seat_id ? "夢家" : "防守";
+        const side = table.mode === "bridge" ? bridgeSideLabel(table, seat.seat_id) : "";
+        const tricks = table.board.phase === "play" || table.board.phase === "ended" ? `${bridgeTricksFor(table, seat.seat_id)} 墩` : "";
+        chips.textContent = [side, role, tricks].filter(Boolean).join(" · ");
         heading.append(chips);
       } else if (isLayoutGame(table)) {
         const chips = document.createElement("span");

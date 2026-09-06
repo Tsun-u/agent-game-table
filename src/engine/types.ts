@@ -3,11 +3,10 @@ import type { Card } from "../cards.js";
 /** 四人搭檔遊戲的椅子名，順時針；對面（隔一位）是搭檔。 */
 export const CHAIRS = ["北", "東", "南", "西"] as const;
 
-/** 席位對引擎送出的一個動作；hand_seat_id 留給橋牌莊家替夢家出牌，目前沒有引擎使用。 */
+/** 席位對引擎送出的一個動作。 */
 export interface SeatAction {
   readonly action: string;
   readonly cards: readonly string[];
-  readonly hand_seat_id?: string;
 }
 
 export interface LegalAction {

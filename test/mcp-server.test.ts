@@ -355,3 +355,50 @@ test("wait_for_table_event stays tiny on timeout and returns a slim table when e
   assert.equal(wokeContent.table.players.every((seat) => !("cards" in seat)), true);
   assert.equal(wokeContent.table.recent_chat.length <= 5, true);
 });
+
+test("MCP Agents can sit by chair at a Contract Bridge table, finish the auction and see the dummy", async (context) => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  const host = await startAgentGameTableHost({ port: 0, store });
+  context.after(() => host.close());
+  const created = store.createTable("阿童", undefined, "bridge");
+  const clients: Client[] = [];
+  for (const [index, name] of ["小光", "小燈", "小葵"].entries()) {
+    const client = await connectMcp(new AgentGameTableHostClient(host.url), `br-${name}`, context);
+    const joined = await client.callTool({ name: "join_table", arguments: { join_code: created.table.join_code, agent_name: name } });
+    assert.equal((joined.structuredContent as { rules: { rules_version: string } }).rules.rules_version, "bridge-tw-1");
+    const seated = tableFrom(await client.callTool({ name: "take_seat", arguments: { expected_version: store.getHumanView(created.human_token).version, idempotency_key: `br-seat-${index}`, position: index + 1 } }));
+    assert.equal(seated.players.find((seat) => seat.is_you)?.chair, ["東", "南", "西"][index]);
+    clients.push(client);
+  }
+  store.humanTakeSeat(created.human_token, store.getHumanView(created.human_token).version, "br-owner-seat", 0);
+  store.startRound(created.human_token, store.getHumanView(created.human_token).version, "br-start");
+  // 第一局北發牌先叫：房主叫 1NT，東南西三家 PASS。
+  const owner = store.getHumanView(created.human_token);
+  assert.equal(owner.legal_actions.includes("bid"), true, "北（房主）先叫");
+  store.humanAction(created.human_token, "bid", owner.version, "br-bid-1nt", ["1NT"]);
+  for (const [index, client] of clients.entries()) {
+    const current = tableFrom(await client.callTool({ name: "get_table_view", arguments: {} }));
+    const passed = await client.callTool({ name: "take_action", arguments: { action: "pass", cards: [], expected_version: current.version, idempotency_key: `br-auction-pass-${index}` } });
+    assert.equal(passed.isError, undefined, JSON.stringify(passed.content));
+  }
+  const afterAuction = store.getHumanView(created.human_token);
+  const board = afterAuction.board as unknown as { phase: string; contract: { declarer_seat_id: string; dummy_seat_id: string; bid: string }; dummy_hand: string[] | null };
+  assert.equal(board.phase, "play");
+  assert.equal(board.contract.bid, "1NT");
+  assert.equal(board.contract.declarer_seat_id, afterAuction.viewer_seat_id, "北是莊家");
+  assert.equal(board.contract.dummy_seat_id, afterAuction.players[2]!.seat_id, "南是夢家");
+  assert.equal(board.dummy_hand, null, "首攻前夢家不攤牌");
+  // 東（莊家下家）首攻，之後夢家攤牌、輪到夢家時由莊家（北）出牌。
+  const east = tableFrom(await clients[0]!.callTool({ name: "get_table_view", arguments: {} }));
+  assert.deepEqual(east.legal_actions, ["play_card"]);
+  const led = await clients[0]!.callTool({ name: "take_action", arguments: { action: "play_card", cards: [...east.legal_plays[0]!.cards], expected_version: east.version, idempotency_key: "br-opening-lead" } });
+  assert.equal(led.isError, undefined, JSON.stringify(led.content));
+  const ownerTurn = store.getHumanView(created.human_token);
+  const dummyHand = (ownerTurn.board as unknown as { dummy_hand: string[] | null }).dummy_hand;
+  assert.equal(dummyHand?.length, 13, "首攻後所有人看得到夢家 13 張");
+  assert.deepEqual(ownerTurn.legal_actions, ["play_card"], "輪到夢家時由莊家操作");
+  assert.equal(ownerTurn.legal_plays.every((play) => dummyHand!.includes(play.cards[0]!)), true, "莊家的合法牌是夢家的牌");
+  const southText = ((await clients[1]!.callTool({ name: "get_table_view", arguments: {} })).content as Array<{ text: string }>)[0]!.text;
+  assert.match(southText, /夢家手牌/, "文字摘要帶夢家手牌");
+  assert.match(southText, /小燈 是夢家|夢家/);
+});
