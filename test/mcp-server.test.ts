@@ -142,7 +142,10 @@ test("MCP Agents can play a Gong Zhu trick and get that table's rules", async (c
   const rules = await clients[0]!.callTool({ name: "get_game_rules", arguments: {} });
   assert.equal((rules.structuredContent as { rules: { game: string } }).rules.game, "拱豬", "get_game_rules follows the table's game once joined");
   store.humanTakeSeat(created.human_token, store.getHumanView(created.human_token).version, "gz-owner-seat");
-  for (const [index, client] of clients.entries()) await seatVia(client, `gz-seat-${index}`);
+  const southView = tableFrom(await clients[0]!.callTool({ name: "take_seat", arguments: { expected_version: store.getHumanView(created.human_token).version, idempotency_key: "gz-seat-south", position: 2 } }));
+  assert.equal(southView.players.find((seat) => seat.is_you)?.chair, "南", "take_seat with position picks that chair");
+  assert.deepEqual(southView.chairs?.map((chair) => chair.name), ["阿童", null, "小光", null]);
+  for (const [index, client] of clients.slice(1).entries()) await seatVia(client, `gz-seat-${index}`);
   const opened = store.startRound(created.human_token, store.getHumanView(created.human_token).version, "gz-start");
   assert.equal(opened.phase, "in_round");
   const views = await Promise.all(clients.map(async (client) => tableFrom(await client.callTool({ name: "get_table_view", arguments: {} }))));

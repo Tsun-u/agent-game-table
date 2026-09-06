@@ -186,7 +186,7 @@ test("isGameOver honours score mode and round mode", () => {
 test("the registry serves gongzhu and hearts with their own labels, seats, and option shapes", () => {
   assert.equal(engineFor("gongzhu").label, "拱豬");
   assert.equal(engineFor("hearts").label, "傷心小棧");
-  assert.deepEqual(engineFor("gongzhu").seats, { min: 4, max: 4, fixed: true });
+  assert.deepEqual(engineFor("gongzhu").seats, { min: 4, max: 4, fixed: true, chairs: ["北", "東", "南", "西"] });
   assert.equal(engineFor("hearts").optionDescriptions.length, 3);
   const normalized = engineFor("gongzhu").normalizeOptions({ end_mode: "rounds", end_rounds: "6", heart_break_lead: true }) as GongzhuOptions;
   assert.equal(normalized.end_rounds, 6);

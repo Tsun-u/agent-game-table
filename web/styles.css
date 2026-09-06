@@ -216,6 +216,14 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--blue); outline-
 .roster-row small { color: var(--muted); }
 .roster-row.spectator span:nth-child(2) { color: var(--muted); }
 .dock-note { margin: 0; color: var(--muted); }
+.chair-picker { display: grid; grid-template-areas: ". n ." "w . e" ". s ."; gap: 6px; justify-content: center; margin-bottom: 8px; }
+.chair-button { padding: 8px 14px; border: 2px solid var(--ink); border-radius: 999px; background: #fff; color: var(--ink); font: inherit; cursor: pointer; }
+.chair-button[data-position="0"] { grid-area: n; }
+.chair-button[data-position="1"] { grid-area: e; }
+.chair-button[data-position="2"] { grid-area: s; }
+.chair-button[data-position="3"] { grid-area: w; }
+.chair-button:not(:disabled):hover { background: var(--ink); color: #fff; }
+.chair-button.taken { border-style: dashed; color: var(--muted); cursor: default; }
 /* 觀戰區：手牌區下方一排名牌，人多就橫向捲 */
 .spectator-strip { display: grid; gap: 8px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
 .spectator-strip .panel-heading h2 { font-size: 0.95rem; }

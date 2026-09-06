@@ -181,7 +181,7 @@ async function routeRequest(
     const body = await readJsonBody(request);
     if (method === "POST" && url.pathname === "/api/human/seat") {
       sendJson(response, 200, {
-        table: store.humanTakeSeat(token, requirePositiveInteger(body.expected_version, "expected_version"), requireIdempotencyKey(body.idempotency_key)),
+        table: store.humanTakeSeat(token, requirePositiveInteger(body.expected_version, "expected_version"), requireIdempotencyKey(body.idempotency_key), optionalPosition(body.position)),
       });
       return;
     }
@@ -291,7 +291,7 @@ async function routeRequest(
     const body = await readJsonBody(request);
     if (method === "POST" && url.pathname === "/api/agent/seat") {
       sendJson(response, 200, {
-        table: store.agentTakeSeat(token, requirePositiveInteger(body.expected_version, "expected_version"), requireIdempotencyKey(body.idempotency_key)),
+        table: store.agentTakeSeat(token, requirePositiveInteger(body.expected_version, "expected_version"), requireIdempotencyKey(body.idempotency_key), optionalPosition(body.position)),
       });
       return;
     }
@@ -419,6 +419,11 @@ function requireCardList(value: unknown): string[] {
 function requirePositiveInteger(value: unknown, field: string): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 1) throw new Error(`${field} 必須是正整數。`);
   return value;
+}
+
+/** 入座位置：沒帶就交給牌桌層挑最小的空椅。 */
+function optionalPosition(value: unknown): number | undefined {
+  return value === undefined || value === null ? undefined : requireNonNegativeInteger(value, "position");
 }
 
 function requireNonNegativeInteger(value: unknown, field: string): number {

@@ -14,7 +14,7 @@ import {
   type GongzhuVariant,
 } from "./gongzhu-rules.js";
 import { legalFollows, sortTrickCards, suitOf, trickWinner, type TrickPlay } from "./trick-taking-core.js";
-import type { DealInput, EngineEvent, EngineTransition, GameBoardView, GameEngine, GameRules, GameSummary, LegalAction, LegalPlay, SeatAction } from "./types.js";
+import { CHAIRS, type DealInput, type EngineEvent, type EngineTransition, type GameBoardView, type GameEngine, type GameRules, type GameSummary, type LegalAction, type LegalPlay, type SeatAction } from "./types.js";
 
 export type PassDirection = "left" | "right" | "across" | "none";
 export type GongzhuSeatStatus = "waiting" | "active" | "sent";
@@ -66,7 +66,7 @@ export function createGongzhuEngine(variant: GongzhuVariant): GameEngine<Gongzhu
     mode: variant,
     label: isHearts ? "傷心小棧" : "拱豬",
     rulesVersion: isHearts ? HEARTS_RULES_VERSION : GONGZHU_RULES_VERSION,
-    seats: { min: SEATS, max: SEATS, fixed: true },
+    seats: { min: SEATS, max: SEATS, fixed: true, chairs: CHAIRS },
     optionDescriptions: isHearts ? HEARTS_OPTION_DESCRIPTIONS : GONGZHU_OPTION_DESCRIPTIONS,
 
     normalizeOptions(value: unknown): GongzhuOptions {

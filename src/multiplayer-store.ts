@@ -28,6 +28,17 @@ export interface PublicSeatView {
   readonly rounds_won: number;
   readonly status: SeatStatus;
   readonly is_you: boolean;
+  /** 有椅子的遊戲才有值：椅子編號與名字（北東南西），對面是搭檔。 */
+  readonly position: number | null;
+  readonly chair: string | null;
+}
+
+/** 有椅子的遊戲每張椅子一筆，空椅 seat_id 與 name 為 null。 */
+export interface PublicChairView {
+  readonly position: number;
+  readonly chair: string;
+  readonly seat_id: string | null;
+  readonly name: string | null;
 }
 
 export interface PublicSpectatorView {
@@ -77,6 +88,8 @@ export interface PublicTableView {
   readonly pending_seat_ids: string[];
   readonly players: PublicSeatView[];
   readonly spectators: PublicSpectatorView[];
+  /** 有椅子的遊戲才有值；沒有椅子的遊戲入座順序就是座位順序。 */
+  readonly chairs: PublicChairView[] | null;
   /** 有人邀你代打時才有值；接受後你會坐進對方的位置，對方退到觀戰區。 */
   readonly substitute_invite: { readonly from_seat_id: string; readonly from_name: string } | null;
   /** 你自己的手牌。 */
@@ -551,14 +564,14 @@ export class MultiplayerTableStore {
     return result;
   }
 
-  humanTakeSeat(humanToken: string, expectedVersion: number, idempotencyKey: string): PublicTableView {
+  humanTakeSeat(humanToken: string, expectedVersion: number, idempotencyKey: string, position?: number): PublicTableView {
     const { table, seat } = this.#tableForHuman(humanToken);
-    return this.#takeSeat(table, seat, expectedVersion, idempotencyKey);
+    return this.#takeSeat(table, seat, expectedVersion, idempotencyKey, position);
   }
 
-  agentTakeSeat(agentToken: string, expectedVersion: number, idempotencyKey: string): PublicTableView {
+  agentTakeSeat(agentToken: string, expectedVersion: number, idempotencyKey: string, position?: number): PublicTableView {
     const { table, session } = this.#tableForAgent(agentToken);
-    return this.#takeSeat(table, this.#requireSeat(table, session.seatId), expectedVersion, idempotencyKey);
+    return this.#takeSeat(table, this.#requireSeat(table, session.seatId), expectedVersion, idempotencyKey, position);
   }
 
   humanLeaveSeat(humanToken: string, expectedVersion: number, idempotencyKey: string): PublicTableView {
@@ -648,7 +661,8 @@ export class MultiplayerTableStore {
     return invite;
   }
 
-  #takeSeat(table: Table, seat: Seat, expectedVersion: number, idempotencyKey: string): PublicTableView {
+  /** position 只對有椅子的遊戲有意義：挑那張椅子，沒帶就坐編號最小的空椅；沒椅子的遊戲忽略它。 */
+  #takeSeat(table: Table, seat: Seat, expectedVersion: number, idempotencyKey: string, position?: number): PublicTableView {
     const operation = "take_seat";
     const replay = this.#replay<PublicTableView>(table, seat.id, idempotencyKey, operation);
     if (replay) return replay;
@@ -657,11 +671,22 @@ export class MultiplayerTableStore {
     if (seat.seated) throw new Error("你已經在座位上。");
     const maxSeats = this.#engine(table).seats.max;
     if (seatedMembers(table).length >= maxSeats) throw new Error(`${chineseCount(maxSeats)}個座位都有人了，請先觀戰。`);
+    const chairs = this.#engine(table).seats.chairs;
+    let chairName: string | null = null;
+    if (chairs) {
+      const taken = new Set(seatedMembers(table).map((member) => member.seatIndex));
+      const wanted = position ?? chairs.findIndex((_, index) => !taken.has(index));
+      if (!Number.isInteger(wanted) || wanted < 0 || wanted >= chairs.length) throw new Error(`位置要在 0 到 ${chairs.length - 1} 之間。`);
+      if (taken.has(wanted)) throw new Error(`${chairs[wanted]}那張椅子有人了，換一張。`);
+      seat.seatIndex = wanted;
+      chairName = chairs[wanted]!;
+    } else {
+      seat.seatIndex = table.nextSeatIndex;
+      table.nextSeatIndex += 1;
+    }
     seat.seated = true;
-    seat.seatIndex = table.nextSeatIndex;
-    table.nextSeatIndex += 1;
     table.version += 1;
-    this.#appendEvent(table, "seat_taken", seat, `${seat.name} 入座。`);
+    this.#appendEvent(table, "seat_taken", seat, chairName ? `${seat.name} 坐${chairName}。` : `${seat.name} 入座。`);
     const result = this.#remember(table, seat.id, idempotencyKey, operation, this.#view(table, seat.id));
     this.#flushWaiters(table);
     this.#persist();
@@ -896,6 +921,7 @@ export class MultiplayerTableStore {
     const viewer = this.#requireSeat(table, viewerSeatId);
     const engine = this.#engine(table);
     const seated = seatedMembers(table);
+    const chairs = engine.seats.chairs ?? null;
     const inRound = table.phase === "in_round" && table.game !== null;
     const state = table.game;
     const pending = inRound ? [...engine.pendingSeatIds(state)] : [];
@@ -926,8 +952,15 @@ export class MultiplayerTableStore {
         seat_id: seat.id, name: seat.name, kind: seat.kind, cards: seat.id === viewerSeatId ? [...hand] : [],
         hand_count: state !== null ? engine.hand(state, seat.id).length : 0, game_score: seat.gameScore, rounds_won: seat.roundsWon,
         status: seatStatus[seat.id] ?? "waiting", is_you: seat.id === viewerSeatId,
+        position: chairs ? seat.seatIndex : null, chair: chairs && seat.seatIndex !== null ? chairs[seat.seatIndex] ?? null : null,
       })),
       spectators: table.seats.filter((seat) => !seat.seated).map((seat) => ({ seat_id: seat.id, name: seat.name, kind: seat.kind, is_you: seat.id === viewerSeatId })),
+      chairs: chairs
+        ? chairs.map((chair, position) => {
+          const sitter = seated.find((seat) => seat.seatIndex === position) ?? null;
+          return { position, chair, seat_id: sitter?.id ?? null, name: sitter?.name ?? null };
+        })
+        : null,
       substitute_invite: inviter ? { from_seat_id: inviter.id, from_name: inviter.name } : null,
       hand, board,
       pile: {

@@ -28,7 +28,7 @@ test("lightbridge options: defaults, invalid values, numeric strings, visibility
   assert.deepEqual(normalizeLightbridgeOptions({ scoring: "tricks", pair_scoring: true, doubling: true, end_mode: "score", end_rounds: "9", end_score: "700" }),
     { scoring: "tricks", pair_scoring: true, doubling: true, end_mode: "score", end_rounds: 9, end_score: 700 });
   for (const [key, value] of [["end_rounds", "rounds"], ["end_score", "score"]]) assert.deepEqual(LIGHTBRIDGE_OPTION_DESCRIPTIONS.find((o) => o.key === key)!.visibleWhen, { key: "end_mode", value });
-  assert.equal(engineFor("lightbridge"), engine); assert.deepEqual(engine.seats, { min: 4, max: 4, fixed: true });
+  assert.equal(engineFor("lightbridge"), engine); assert.deepEqual(engine.seats, { min: 4, max: 4, fixed: true, chairs: ["北", "東", "南", "西"] });
   assert.equal(engine.label, "台灣輕橋牌"); assert.equal(engine.rulesVersion, "lightbridge-tw-1");
 });
 test("lightbridge rules: readable rules, options and all six actions", () => {

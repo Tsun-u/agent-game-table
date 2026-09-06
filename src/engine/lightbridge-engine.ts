@@ -4,7 +4,7 @@ import { BIDS, bidRank, bidStrain } from "./honeymoon-rules.js";
 import { highCardPoints, REDEAL_THRESHOLD, buildLightbridgeRules, formatLightbridgeRules, normalizeLightbridgeOptions,
   LIGHTBRIDGE_LABEL, LIGHTBRIDGE_RULES_VERSION, LIGHTBRIDGE_OPTION_DESCRIPTIONS, scoreLightbridgeRound,
   type LightbridgeOptions, type LightbridgeRules, type LightbridgeContract } from "./lightbridge-rules.js";
-import type { EngineEvent, EngineTransition, GameBoardView, GameEngine, LegalAction, LegalPlay } from "./types.js";
+import { CHAIRS, type EngineEvent, type EngineTransition, type GameBoardView, type GameEngine, type LegalAction, type LegalPlay } from "./types.js";
 
 export interface LightbridgeState {
   phase: "bidding" | "play" | "ended";
@@ -85,7 +85,7 @@ function redeal(state: LightbridgeState): LightbridgeState {
 }
 export const lightbridgeEngine: GameEngine<LightbridgeState, LightbridgeOptions> = {
   mode: "lightbridge", label: LIGHTBRIDGE_LABEL, rulesVersion: LIGHTBRIDGE_RULES_VERSION,
-  seats: { min: 4, max: 4, fixed: true }, optionDescriptions: LIGHTBRIDGE_OPTION_DESCRIPTIONS,
+  seats: { min: 4, max: 4, fixed: true, chairs: CHAIRS }, optionDescriptions: LIGHTBRIDGE_OPTION_DESCRIPTIONS,
   normalizeOptions: normalizeLightbridgeOptions, buildRules: buildLightbridgeRules, formatRules: (rules) => formatLightbridgeRules(rules as LightbridgeRules),
   deal(input) {
     const dealer = input.seatIds[(input.round - 1) % 4]!;

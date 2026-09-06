@@ -24,6 +24,8 @@ const seatSchema = z.object({
   rounds_won: z.number().int().nonnegative(),
   status: z.string(),
   is_you: z.boolean(),
+  position: z.number().int().nonnegative().nullable(),
+  chair: z.string().nullable(),
 });
 
 const memberRoleSchema = z.enum(["seated", "spectator"]);
@@ -55,6 +57,7 @@ const tableSchema = z.object({
   pending_seat_ids: z.array(z.string().uuid()),
   players: z.array(seatSchema),
   spectators: z.array(z.object({ seat_id: z.string().uuid(), name: z.string(), kind: z.enum(["human", "agent"]), is_you: z.boolean() })),
+  chairs: z.array(z.object({ position: z.number().int().nonnegative(), chair: z.string(), seat_id: z.string().uuid().nullable(), name: z.string().nullable() })).nullable(),
   substitute_invite: z.object({ from_seat_id: z.string().uuid(), from_name: z.string() }).nullable(),
   hand: z.array(z.string()),
   board: z.object({ phase: z.string() }).passthrough(),
@@ -192,12 +195,12 @@ export function createAgentGameTableMcpServer(host: AgentGameTableAgentHost = ne
     "take_seat",
     {
       title: "Take a seat at the table",
-      description: "Move from the spectator area into a seat (4 for most games, 6 for Paiqi, 2 for Honeymoon Bridge) so you are dealt in next round. Only allowed while no round is in progress. Pass the latest version as expected_version and a fresh idempotency_key.",
-      inputSchema: { expected_version: z.number().int().positive(), idempotency_key: idempotencyKeySchema },
+      description: "Move from the spectator area into a seat (4 for most games, 6 for Paiqi, 2 for Honeymoon Bridge) so you are dealt in next round. Only allowed while no round is in progress. Games with chairs (Gong Zhu, Taiwan Light Bridge) accept position 0–3 (北 east 東 south 南 west 西, clockwise); the chair across from you is your partner, and the table view's chairs array shows which are free. Omit position to take the lowest free chair. Pass the latest version as expected_version and a fresh idempotency_key.",
+      inputSchema: { expected_version: z.number().int().positive(), idempotency_key: idempotencyKeySchema, position: z.number().int().min(0).max(5).optional() },
       outputSchema: { table: tableSchema },
       annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false, idempotentHint: true },
     },
-    async ({ expected_version, idempotency_key }) => withSeat(currentToken, async (token) => tableResult(await host.takeSeat(token, expected_version, idempotency_key))),
+    async ({ expected_version, idempotency_key, position }) => withSeat(currentToken, async (token) => tableResult(await host.takeSeat(token, expected_version, idempotency_key, position))),
   );
 
   server.registerTool(

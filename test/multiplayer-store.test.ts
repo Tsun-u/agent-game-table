@@ -379,3 +379,25 @@ test("play_cards is accepted as an alias of play_card outside Big Two, for clien
   assert.equal(after.version, view.version + 1, "the aliased action was applied");
   assert.equal(after.hand.length, view.hand.length - 1);
 });
+
+test("有椅子的遊戲可以挑位置，對面是搭檔，被佔會報錯", () => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  const owner = store.createTable("房主", undefined, "gongzhu");
+  const a = store.joinAgent(owner.table.join_code, "阿宇");
+  const b = store.joinAgent(owner.table.join_code, "小葵");
+  store.humanTakeSeat(owner.human_token, tableVersion(store, owner.human_token), "chair-1", 0);
+  store.agentTakeSeat(a.agent_token, tableVersion(store, owner.human_token), "chair-2", 2);
+  assert.throws(() => store.agentTakeSeat(b.agent_token, tableVersion(store, owner.human_token), "chair-3", 2), /有人了/);
+  assert.throws(() => store.agentTakeSeat(b.agent_token, tableVersion(store, owner.human_token), "chair-4", 4), /0 到 3/);
+  const view = store.agentTakeSeat(b.agent_token, tableVersion(store, owner.human_token), "chair-5");
+  assert.deepEqual(view.players.map((seat) => [seat.name, seat.position, seat.chair]), [["房主", 0, "北"], ["小葵", 1, "東"], ["阿宇", 2, "南"]], "沒帶位置就坐最小的空椅");
+  assert.deepEqual(view.chairs?.map((chair) => [chair.chair, chair.name]), [["北", "房主"], ["東", "小葵"], ["南", "阿宇"], ["西", null]]);
+});
+
+test("沒有椅子的遊戲忽略位置參數", () => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  const owner = store.createTable("房主");
+  const view = store.humanTakeSeat(owner.human_token, tableVersion(store, owner.human_token), "chair-1", 3);
+  assert.equal(view.players[0]!.position, null);
+  assert.equal(view.chairs, null);
+});

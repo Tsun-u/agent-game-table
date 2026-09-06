@@ -32,7 +32,7 @@
       "seatCount", "roster", "chatLog", "chatForm", "chatInput", "statusLine", "passphraseLabel", "createPassphrase", "adminKeyLabel", "adminKey",
       "managementPanel", "managementList", "managedTableCount", "managementHint", "refreshTables", "backToTables", "leaveTable",
       "lobbyPanel", "lobbyList", "lobbyCount", "lobbyHint",
-      "tableStatus", "roundCelebration", "roundCelebrationAnimation", "roundCelebrationLabel", "gameModeLabel", "gameMode", "ruleOptionFields", "ruleOptions", "tableName", "railToggle", "rail", "railClose", "railBackdrop", "handDock", "seatButton", "unseatButton", "acceptSubstitute", "dockNote", "spectatorList", "spectatorCount",
+      "tableStatus", "roundCelebration", "roundCelebrationAnimation", "roundCelebrationLabel", "gameModeLabel", "gameMode", "ruleOptionFields", "ruleOptions", "tableName", "railToggle", "rail", "railClose", "railBackdrop", "handDock", "seatButton", "chairPicker", "unseatButton", "acceptSubstitute", "dockNote", "spectatorList", "spectatorCount",
     ].map((id) => [id, document.getElementById(id)]),
   );
 
@@ -51,11 +51,11 @@
     });
   }
 
-  async function changeSeat(path, message) {
+  async function changeSeat(path, message, extra = {}) {
     await run(async () => {
       const result = await api(path, {
         method: "POST",
-        body: { expected_version: state.table.version, idempotency_key: `seat-${crypto.randomUUID()}` },
+        body: { expected_version: state.table.version, idempotency_key: `seat-${crypto.randomUUID()}`, ...extra },
       });
       state.selectedCards.clear();
       setTable(result.table);
@@ -250,9 +250,9 @@
     if (!state.table) return;
     const prompt = `Agent Game Table 牌桌邀請碼：${state.table.join_code}
 
-人類玩家：開啟 ${window.location.origin}${window.location.pathname}，在「加入朋友的桌」輸入名字與邀請碼，進桌後按「入座」。
+人類玩家：開啟 ${window.location.origin}${window.location.pathname}，在「加入朋友的桌」輸入名字與邀請碼，進桌後${state.table.chairs ? "挑一張椅子入座，對面是你的搭檔" : "按「入座」"}。
 
-AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌桌 ${state.table.join_code}（回應會附上這桌的完整${state.table.rule_label}規則），接著呼叫 take_seat 入座。${agentTurnInstructions(state.table.mode)}局間若人類請你讓位，用 leave_seat 到觀戰區繼續看牌聊天。`;
+AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌桌 ${state.table.join_code}（回應會附上這桌的完整${state.table.rule_label}規則），接著呼叫 take_seat 入座${state.table.chairs ? "（可帶 position 0–3 挑北東南西的椅子，對面是搭檔；沒帶就坐最小的空椅）" : ""}。${agentTurnInstructions(state.table.mode)}局間若人類請你讓位，用 leave_seat 到觀戰區繼續看牌聊天。`;
     await navigator.clipboard.writeText(prompt);
     setStatus("邀請詞已複製，可以直接貼給 Codex 或 Claude Code。");
   });
@@ -630,9 +630,27 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     syncActionButtons(table);
   }
 
+  /** 有椅子的遊戲把「入座」換成十字排的四張椅子；有人的椅子顯示名字，空椅點了就坐。 */
+  function renderChairPicker(table, visible) {
+    elements.chairPicker.hidden = !visible;
+    if (!visible) return;
+    elements.chairPicker.replaceChildren(...table.chairs.map((chair) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `chair-button${chair.name ? " taken" : ""}`;
+      button.dataset.position = String(chair.position);
+      button.disabled = state.busy || chair.name !== null;
+      button.textContent = chair.name ? `${chair.chair}｜${chair.name}` : `坐${chair.chair}`;
+      button.addEventListener("click", () => void changeSeat("/api/human/seat", `已坐${chair.chair}，等房主開局。`, { position: chair.position }));
+      return button;
+    }));
+  }
+
   function syncActionButtons(table) {
     const spectating = table.viewer_role === "spectator";
-    elements.seatButton.hidden = !table.legal_actions.includes("take_seat");
+    const canSit = table.legal_actions.includes("take_seat");
+    elements.seatButton.hidden = !canSit || table.chairs !== null;
+    renderChairPicker(table, canSit && table.chairs !== null);
     elements.unseatButton.hidden = !table.legal_actions.includes("leave_seat");
     elements.acceptSubstitute.hidden = !table.legal_actions.includes("accept_substitute");
     elements.acceptSubstitute.disabled = state.busy;
@@ -645,7 +663,9 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
       ? "你在觀戰區看這一局。等這局結束就可以入座。"
       : table.players.length >= (state.games[table.mode]?.seats?.max ?? 4)
         ? "你在觀戰區。座位都滿了，等有人起身再入座。"
-        : "你在觀戰區。按「入座」加入下一局。";
+        : table.chairs
+          ? "你在觀戰區。挑一張空椅子加入下一局，對面是你的搭檔。"
+          : "你在觀戰區。按「入座」加入下一局。";
     elements.startRound.hidden = !table.legal_actions.includes("start_round");
     elements.startRound.textContent = table.phase === "game_over" ? "再來一場" : table.phase === "ended" ? "開下一局" : "開始牌局";
     const trick = isTrickGame(table) || isPickGame(table) || isLayoutGame(table) || isBridgeGame(table);
@@ -1139,7 +1159,7 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
       heading.className = "seat-heading";
       const name = document.createElement("strong");
       name.dataset.kind = seat.kind === "human" ? "人" : "AI";
-      name.textContent = `${seat.name}${seat.is_you ? "（你）" : ""}`;
+      name.textContent = `${seat.chair ? `${seat.chair}｜` : ""}${seat.name}${seat.is_you ? "（你）" : ""}`;
       const points = document.createElement("span");
       points.textContent = `${seat.hand_count} 張 · ${seat.game_score} 分`;
       heading.append(name, points);

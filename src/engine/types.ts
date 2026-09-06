@@ -1,5 +1,8 @@
 import type { Card } from "../cards.js";
 
+/** 四人搭檔遊戲的椅子名，順時針；對面（隔一位）是搭檔。 */
+export const CHAIRS = ["北", "東", "南", "西"] as const;
+
 /** 席位對引擎送出的一個動作；hand_seat_id 留給橋牌莊家替夢家出牌，目前沒有引擎使用。 */
 export interface SeatAction {
   readonly action: string;
@@ -86,7 +89,8 @@ export interface GameEngine<State = unknown, Options = unknown> {
   readonly mode: string;
   readonly label: string;
   readonly rulesVersion: string;
-  readonly seats: { readonly min: number; readonly max: number; readonly fixed: boolean };
+  /** chairs 有值代表位置有意義（對面是搭檔），長度等於 max，入座時可挑椅子；沒有就照入座順序排。 */
+  readonly seats: { readonly min: number; readonly max: number; readonly fixed: boolean; readonly chairs?: readonly string[] };
   readonly optionDescriptions: readonly OptionDescription[];
   normalizeOptions(value: unknown): Options;
   buildRules(options: Options): GameRules;

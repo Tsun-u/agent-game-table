@@ -48,7 +48,7 @@ export interface GameEngine<State, Options> {
   readonly mode: string;                       // "bigtwo" | "gongzhu" | ...
   readonly label: string;                      // "大老二"
   readonly rulesVersion: string;               // "bigtwo-tw-5"
-  readonly seats: { min: number; max: number; fixed: boolean };   // 拱豬 4/4/true、大老二 2/4/false
+  readonly seats: { min: number; max: number; fixed: boolean; chairs?: readonly string[] };   // 拱豬 4/4/true、大老二 2/4/false；chairs（2026-09-06 加）有值代表可挑椅子、對面是搭檔，take_seat 的 position 就是椅子編號
   readonly optionDescriptions: OptionDescription[];               // 開桌表單用
   normalizeOptions(value: unknown): Options;   // 缺欄位補預設、型別錯就拒絕（沿用現有 normalizeRuleOptions）
   buildRules(options: Options): GameRules;     // get_game_rules 與 join_table 回傳的規則物件
@@ -67,6 +67,7 @@ export interface GameEngine<State, Options> {
 }
 
 export interface SeatAction { action: string; cards: string[]; hand_seat_id?: string }  // hand_seat_id 留給橋牌莊家替夢家出牌，本階段不實作
+// 2026-09-06 更新：合約橋牌定案由莊家直接送夢家的牌（引擎靠牌面認手牌），hand_seat_id 用不到，隨合約橋牌一起移除（docs/specs/2026-09-06-contract-bridge-rules.md 三.3）
 export interface LegalAction { action: string; label: string }
 export interface LegalPlay { action: string; cards: string[]; label: string }            // action 預設 play_cards；亮牌、傳牌也走這裡
 export interface RoundResult { winnerSeatId: string | null; scoreDelta: Record<string, number>; gameOver: boolean; text: string }
