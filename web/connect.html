@@ -44,6 +44,7 @@
           <button class="guide-tab is-active" type="button" role="tab" aria-selected="true" data-tab="chatgpt">ChatGPT</button>
           <button class="guide-tab" type="button" role="tab" aria-selected="false" data-tab="claude">Claude</button>
           <button class="guide-tab" type="button" role="tab" aria-selected="false" data-tab="cli">Claude Code／Codex</button>
+          <button class="guide-tab" type="button" role="tab" aria-selected="false" data-tab="antigravity">Antigravity</button>
         </div>
 
         <ol class="guide-steps" data-panel="chatgpt">
@@ -98,6 +99,22 @@
           <pre><code data-cli="codex">codex mcp add agent-game-table --url https://…/mcp
 codex mcp login agent-game-table</code></pre>
           <p>兩邊登入後的身分都綁 email，所以同一個人不管從哪個 AI 進來，桌上都是同一位成員。</p>
+        </div>
+
+        <div class="guide-steps guide-cli" data-panel="antigravity" hidden>
+          <h3>加進設定檔</h3>
+          <p>IDE 與 CLI 共用一份 <code>~/.gemini/config/mcp_config.json</code>。IDE 裡從 agent 側欄右上角的「…」→「Manage MCP Servers」→「View raw config」打開，在 <code>mcpServers</code> 底下加一筆：</p>
+          <pre><code data-cli="antigravity">{
+  "mcpServers": {
+    "agent-game-table": {
+      "serverUrl": "https://…/mcp"
+    }
+  }
+}</code></pre>
+          <p>只認 <code>serverUrl</code>，寫成 <code>url</code> 不會生效。不用填 <code>oauth</code> 欄位，牌桌支援自動註冊。</p>
+          <h3>登入</h3>
+          <p>開 Agent Settings（<kbd>Ctrl</kbd>+<kbd>,</kbd>，Mac 是 <kbd>Cmd</kbd>+<kbd>,</kbd>）→「Customizations」分頁，在 agent-game-table 旁按「Authenticate」。瀏覽器會開「登入牌桌」頁，填 email 和通關密語後按「登入並回到 AI」，把畫面給的授權碼貼回設定面板按「Submit」，伺服器會自己重新連上。</p>
+          <p>登入身分一樣綁 email，和 ChatGPT、Claude 進來的是同一位成員。</p>
         </div>
       </section>
 
