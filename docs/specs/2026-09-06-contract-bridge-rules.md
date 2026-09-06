@@ -144,11 +144,11 @@ interface BridgeState {
 ## 五、叫品提示
 
 - 檔案 `src/engine/bridge-systems.ts`：`suggestCall(system, hand, auction, seatRole) → { call, reason } | null`。純函式。**由牌桌層呼叫**（引擎看不到席位宣告的制度，制度也不進引擎）：`#view` 在 mode 為 `bridge`、叫牌階段、觀看者輪到時，用該席位的 `bidding_system`、`engine.hand()` 與 board 的 `bids` 算一次，掛在公開視角的 `bid_hint: { call, reason } | null`；夢家、打牌階段、觀戰者為 null。
-- 第一版覆蓋範圍：**開叫**（含 PASS）、**對搭檔開叫的第一次應叫**（1 線花色應叫、1NT 應叫含 Stayman 與 Jacoby 轉換、加叫、2 線以上）、**對開叫者的第一次再叫**、**爭叫**（一線花色蓋叫、1NT 蓋叫、技術性 Double）。超出範圍回 null，前端顯示「這一輪沒有建議」。
+- 覆蓋範圍：SAYC 手冊有寫的處境逐條照手冊（開叫、各種應叫、再叫、爭叫，三批計畫），手冊沒寫的後續輪次用通用規則；建議不合法時回 null，前端顯示「這一輪沒有建議」。
 - 理由用一句人話：「13 點、五張黑桃，開叫 1♠」「8 點、四張紅心，Stayman 問高花」。
 - 提示是建議，`legal_plays` 不因它變動；Agent 可以無視。
 - 實作：`docs/plans/2026-09-06-bridge-hints.md`；規則數字摘要 `docs/research/2026-09-06-sayc-reference.md`。
-- 第二批（童童 2026-09-06 要求先補）：搭檔開弱二的應叫、搭檔開叫後對手 Double 的應叫、搭檔技術性 Double 後的應叫，`docs/plans/2026-09-06-bridge-hints-2.md`。仍未做：搭檔蓋叫後的應叫、對手開 1NT 的爭叫、第三輪以後。
+- 第二批（童童 2026-09-06 要求先補）：搭檔開弱二的應叫、搭檔開叫後對手 Double 的應叫、搭檔技術性 Double 後的應叫，`docs/plans/2026-09-06-bridge-hints-2.md`。第三批（童童 2026-09-06 決定一次做完）：其餘固定處境＋第三輪以後的通用規則（估搭檔最低點數、配合判斷、成局／邀請／競叫／守住），`docs/plans/2026-09-06-bridge-hints-3.md`。至此任何局面都有建議。
 
 ## 六、前端（阿宇做）
 
