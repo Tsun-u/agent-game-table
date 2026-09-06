@@ -382,6 +382,15 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
 .segmented button[aria-checked="true"] { background: var(--ink); color: #fff; }
 .segmented button:focus-visible { outline: 2px solid var(--red); outline-offset: -3px; }
 
+/* 選項多到一排放不下時用 chips：每顆寬度隨文字、放不下就換行 */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips button {
+  padding: 8px 14px; border: 1.5px solid var(--ink); border-radius: 999px; background: var(--card); color: var(--text);
+  font: inherit; font-weight: 600; white-space: nowrap; cursor: pointer;
+}
+.chips button[aria-checked="true"] { background: var(--ink); color: #fff; }
+.chips button:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+
 .rule-option-number, .rule-option-choice { display: grid; grid-template-columns: minmax(0, 1fr) 160px; align-items: center; gap: 10px; }
 .rule-option-number input { width: 100%; min-width: 0; padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: 8px; font: inherit; }
 .rule-option-choice .segmented button { padding: 6px 8px; font-size: 0.88rem; }
