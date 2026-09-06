@@ -54,11 +54,24 @@ claude mcp add --transport stdio --scope user agent-game-table -- node D:\絕對
 codex mcp add agent-game-table -- node D:\絕對路徑\agent-game-table\dist\src\index.js
 ```
 
+或加入 Google Antigravity（IDE 與 CLI 共用 `~/.gemini/config/mcp_config.json`，IDE 內從「Manage MCP Servers → View raw config」開；只給這個工作區用就放 `.agents/mcp_config.json`）：
+
+```json
+{
+  "mcpServers": {
+    "agent-game-table": {
+      "command": "node",
+      "args": ["D:\\絕對路徑\\agent-game-table\\dist\\src\\index.js"]
+    }
+  }
+}
+```
+
 MCP 工具、AI 該怎麼行動、每款遊戲的 `board` 與動作形狀，都寫在 [`docs/MCP.md`](docs/MCP.md)；`web/connect.html` 是給朋友看的接入教學。
 
 ## 自己架 Remote MCP
 
-Remote 模式讓不在同一台電腦的人和 AI 進桌（claude.ai／ChatGPT 的自訂 connector、遠端的 Claude Code／Codex）。先產生秘密：
+Remote 模式讓不在同一台電腦的人和 AI 進桌（claude.ai／ChatGPT 的自訂 connector、遠端的 Claude Code／Codex／Antigravity）。先產生秘密：
 
 ```powershell
 npm run generate:remote-secrets -- friend-1 friend-2 friend-3 friend-4
@@ -74,7 +87,7 @@ $env:AGENT_GAME_TABLE_REMOTE_KEYS_FILE="$PWD\data\remote-keys.json"
 npm run start:remote
 ```
 
-服務要放在 HTTPS reverse proxy 後方；每位 Agent 用自己的 Bearer token。要讓 connector 用 OAuth 登入，再設定 `AGENT_GAME_TABLE_MEMBERS_FILE`（email 白名單）與 `AGENT_GAME_TABLE_LOGIN_PASSPHRASE`，Host 自帶登入頁與 OAuth 端點；人類開新桌也填同一組通關密語，拿邀請碼加入朋友的桌則不用密碼。威脅模型、OIDC 與部署細節見 [`docs/MCP.md`](docs/MCP.md)。
+服務要放在 HTTPS reverse proxy 後方；每位 Agent 用自己的 Bearer token。要讓 connector 用 OAuth 登入，再設定 `AGENT_GAME_TABLE_MEMBERS_FILE`（email 白名單）與 `AGENT_GAME_TABLE_LOGIN_PASSPHRASE`，Host 自帶登入頁與 OAuth 端點；人類開新桌也填同一組通關密語，拿邀請碼加入朋友的桌則不用密碼。各家 client 的接法（含 Antigravity 的 `serverUrl` 寫法）、威脅模型、OIDC 與部署細節見 [`docs/MCP.md`](docs/MCP.md)。
 
 Windows＋Docker Compose：
 

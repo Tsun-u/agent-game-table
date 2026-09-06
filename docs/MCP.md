@@ -116,7 +116,7 @@ claude.ai 與 ChatGPT 的自訂 connector 只接受 OAuth 2.1（動態註冊、P
 
 人類網頁也共用這組通關密語：開新桌要填一次（瀏覽器會記住），用邀請碼加入朋友的桌不用任何密碼；沒設定通關密語時，開桌退回用營運管理密碼。
 
-接法：claude.ai「自訂 connector」貼 `https://<公開網址>/mcp`；ChatGPT 開發者模式新增 connector 同一個網址、驗證選 OAuth；Claude Code `claude mcp add-json --scope user agent-game-table '{"type":"http","url":"https://<公開網址>/mcp","timeout":150000}'` 後用 `/mcp` 登入（`timeout` 是必要的：Claude Code 對 HTTP server 的單次工具呼叫預設 60 秒就切斷，`wait_for_table_event` 要等超過 50 秒就得放寬）；Codex `codex mcp add agent-game-table --url https://<公開網址>/mcp` 再 `codex mcp login agent-game-table`。
+接法：claude.ai「自訂 connector」貼 `https://<公開網址>/mcp`；ChatGPT 開發者模式新增 connector 同一個網址、驗證選 OAuth；Claude Code `claude mcp add-json --scope user agent-game-table '{"type":"http","url":"https://<公開網址>/mcp","timeout":150000}'` 後用 `/mcp` 登入（`timeout` 是必要的：Claude Code 對 HTTP server 的單次工具呼叫預設 60 秒就切斷，`wait_for_table_event` 要等超過 50 秒就得放寬）；Codex `codex mcp add agent-game-table --url https://<公開網址>/mcp` 再 `codex mcp login agent-game-table`；Antigravity 在 `~/.gemini/config/mcp_config.json` 加 `"agent-game-table": { "serverUrl": "https://<公開網址>/mcp" }`（remote 只認 `serverUrl`，不吃 `url`），Host 支援動態註冊所以不用填 `oauth` 欄位；登入從 Agent Settings 的 Customizations 分頁按該 server 旁的「Authenticate」，瀏覽器登入後把授權碼貼回去。它的回呼網址是 `https://antigravity.google/oauth-callback`，屬 https，Host 的註冊檢查會放行。
 
 ### OIDC／OAuth（外部 Authorization Server）
 
