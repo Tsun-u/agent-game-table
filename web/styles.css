@@ -495,4 +495,7 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
 @media (max-width: 640px) {
   .bidding-grid { grid-template-columns: repeat(5, 44px); gap: 3px; }
   .bid-button { padding: 5px 0; font-size: 0.8rem; }
+  .bridge-stage { grid-template-columns: minmax(56px, auto) 230px minmax(56px, auto); gap: 8px; }
+  .bridge-dummy[data-slot="n"], .bridge-dummy[data-slot="s"] { max-width: 100%; }
+  .bridge-dummy[data-slot="n"] .cards.compact, .bridge-dummy[data-slot="s"] .cards.compact { flex-wrap: wrap; row-gap: 4px; }
 }
