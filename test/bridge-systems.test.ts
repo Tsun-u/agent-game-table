@@ -469,3 +469,29 @@ cases("partner point floors through general hints", [
   { name: "raise of partner overcall six", p: 1, shape: [2, 3, 4, 4], expected: "PASS", reason: /合計約 7 點/, calls: ["1♦", "1♠", "PASS", "2♠", "3♥"], start: 3 },
   { name: "waiting is not natural new suit", p: 23, shape: [4, 3, 3, 3], expected: "PASS", reason: /合計約 23 點/, calls: ["2♣", "PASS", "2♦", "2♠"] },
 ]);
+
+// Vulnerability: preempts need two of the top three honors, two-level overcalls need 11.
+const vulnerabilityCases: { name: string; cards: string[]; calls?: readonly string[]; vulnerable: boolean; expected: string; reason: RegExp }[] = [
+  { name: "weak two non-vulnerable with a poor suit", cards: ["♠J", "♠9", "♠8", "♠7", "♠6", "♠5", "♥A", "♥K", "♥4", "♦Q", "♦4", "♦2", "♣3"], vulnerable: false, expected: "2♠", reason: /無身價/ },
+  { name: "weak two vulnerable with a good suit", cards: ["♠K", "♠Q", "♠8", "♠7", "♠6", "♠5", "♥J", "♥4", "♥3", "♦J", "♦4", "♦2", "♣3"], vulnerable: true, expected: "2♠", reason: /有身價/ },
+  { name: "weak two vulnerable with a poor suit passes", cards: ["♠J", "♠9", "♠8", "♠7", "♠6", "♠5", "♥A", "♥K", "♥4", "♦Q", "♦4", "♦2", "♣3"], vulnerable: true, expected: "PASS", reason: /有身價但沒有兩張大牌/ },
+  { name: "preempt vulnerable with a good suit", cards: ["♠A", "♠Q", "♠9", "♠8", "♠7", "♠6", "♠5", "♥4", "♥3", "♥2", "♦4", "♦3", "♣2"], vulnerable: true, expected: "3♠", reason: /有身價.*阻擊/ },
+  { name: "preempt vulnerable with a poor suit passes", cards: ["♠J", "♠9", "♠8", "♠7", "♠6", "♠5", "♠4", "♥4", "♥3", "♥2", "♦4", "♦3", "♣2"], vulnerable: true, expected: "PASS", reason: /不阻擊/ },
+  { name: "weak jump overcall vulnerable with a good suit", cards: ["♠A", "♠K", "♠9", "♠8", "♠7", "♠6", "♥5", "♥4", "♥3", "♦4", "♦2", "♣3", "♣2"], calls: ["1♦"], vulnerable: true, expected: "2♠", reason: /有身價.*弱跳蓋叫/ },
+  { name: "weak jump overcall vulnerable with a poor suit passes", cards: ["♠J", "♠9", "♠8", "♠7", "♠6", "♠5", "♥K", "♥4", "♥3", "♦4", "♦2", "♣Q", "♣3"], calls: ["1♦"], vulnerable: true, expected: "PASS", reason: /未符合爭叫條件/ },
+  { name: "two-level overcall non-vulnerable with 10", cards: ["♠3", "♠2", "♥4", "♥3", "♥2", "♦J", "♦4", "♦3", "♣A", "♣K", "♣Q", "♣5", "♣4"], calls: ["1♠"], vulnerable: false, expected: "2♣", reason: /自然爭叫/ },
+  { name: "two-level overcall vulnerable with 10 passes", cards: ["♠3", "♠2", "♥4", "♥3", "♥2", "♦J", "♦4", "♦3", "♣A", "♣K", "♣Q", "♣5", "♣4"], calls: ["1♠"], vulnerable: true, expected: "PASS", reason: /有身價二線爭叫要 11 點/ },
+  { name: "two-level overcall vulnerable with 11", cards: ["♠3", "♠2", "♥4", "♥3", "♥2", "♦Q", "♦4", "♦3", "♣A", "♣K", "♣Q", "♣5", "♣4"], calls: ["1♠"], vulnerable: true, expected: "2♣", reason: /自然爭叫/ },
+];
+for (const row of vulnerabilityCases) test(`vulnerability: ${row.name}`, () => {
+  const history = auction(row.calls ?? [], 3);
+  const result = suggestCall("sayc", row.cards, history, order, order[0], row.vulnerable);
+  assert.equal(result?.call, row.expected);
+  assert.match(result!.reason, row.reason);
+  assert.equal(result!.reason.split(/[。！？\n]/).filter(Boolean).length, 1);
+});
+
+test("vulnerability defaults to non-vulnerable", () => {
+  const cards = hand(7, [6, 3, 2, 2]);
+  assert.deepEqual(suggestCall("sayc", cards, [], order, order[0]), suggestCall("sayc", cards, [], order, order[0], false));
+});

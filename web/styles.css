@@ -470,10 +470,21 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
 .bridge-trick.compass .trick-play[data-slot="s"] { bottom: 0; left: 50%; transform: translateX(-50%); }
 .bridge-trick.compass .trick-play[data-slot="w"] { left: 0; top: 50%; transform: translateY(-50%); }
 .bridge-trick.compass .trick-play[data-slot="e"] { right: 0; top: 50%; transform: translateY(-50%); }
-.bridge-dummy { display: grid; gap: 2px; padding: 4px 10px; border: 1px dashed var(--line-strong); border-radius: 10px; width: 100%; }
+.bridge-dummy { display: grid; gap: 2px; padding: 4px 10px; border: 1px dashed var(--line-strong); border-radius: 10px; }
 .bridge-dummy small { color: var(--muted); font-size: 0.78rem; }
-.bridge-dummy .cards.compact { justify-content: center; padding-left: 22px; }
+.bridge-dummy .cards.compact { flex-wrap: nowrap; justify-content: center; padding-left: 22px; }
 .bridge-dummy .cards.compact .playing-card { flex: 0 0 62px; width: 62px; height: 88px; margin-left: -22px; }
+/* 桌面九宮格：本墩在中央，夢家依方位放到上下左右；東西向的夢家把牌直著疊，只露每張的左上角。 */
+.bridge-stage { display: grid; grid-template-columns: minmax(96px, auto) 230px minmax(96px, auto); grid-template-rows: auto minmax(176px, auto) auto; grid-template-areas: "n n n" "w c e" "s s s"; align-items: center; justify-items: center; gap: 10px 14px; }
+.bridge-stage .bridge-trick.compass { grid-area: c; }
+.bridge-dummy[data-slot="n"] { grid-area: n; }
+.bridge-dummy[data-slot="s"] { grid-area: s; }
+.bridge-dummy[data-slot="e"] { grid-area: e; }
+.bridge-dummy[data-slot="w"] { grid-area: w; }
+.bridge-dummy[data-slot="e"] .cards.compact, .bridge-dummy[data-slot="w"] .cards.compact { flex-direction: column; flex-wrap: nowrap; align-items: center; padding-left: 0; padding-top: 62px; }
+.bridge-dummy[data-slot="e"] .cards.compact .playing-card, .bridge-dummy[data-slot="w"] .cards.compact .playing-card { flex-basis: 88px; margin-left: 0; margin-top: -66px; }
+.bridge-dummy[data-slot="e"] .playing-card, .bridge-dummy[data-slot="w"] .playing-card { display: flex; gap: 6px; align-items: flex-start; }
+.bridge-dummy[data-slot="e"] .playing-card span, .bridge-dummy[data-slot="w"] .playing-card span { align-self: flex-start; font-size: 1.1rem; }
 .bid-log th.vulnerable { color: #c62828; }
 .pile-cards.last-trick .trick-play { opacity: 0.55; }
 .playing-card.just-drawn { animation: just-drawn 1.2s ease-out; }

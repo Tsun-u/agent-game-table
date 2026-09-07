@@ -986,9 +986,11 @@ export class MultiplayerTableStore {
     const hand = state !== null && viewer.seated ? [...engine.hand(state, viewer.id)] : [];
     const rawPile = (board.pile ?? {}) as { cards?: readonly string[]; hand_type?: string | null; played_by_seat_id?: string | null };
     const pileSeat = rawPile.played_by_seat_id ? table.seats.find((seat) => seat.id === rawPile.played_by_seat_id) ?? null : null;
+    const vulnerable = (board.vulnerable ?? { ns: false, ew: false }) as { ns: boolean; ew: boolean };
+    const viewerVulnerable = (viewer.seatIndex ?? 0) % 2 === 0 ? vulnerable.ns : vulnerable.ew;
     const bidHint = table.mode === "bridge" && inRound && viewer.seated && pending.includes(viewer.id) && board.phase === "bidding"
       ? legalBidHint(
-        suggestCall(viewer.biddingSystem ?? DEFAULT_BIDDING_SYSTEM, hand, ((board.bids as Array<{ seat_id: string; call: string }> | undefined) ?? []).map((bid) => ({ seatId: bid.seat_id, call: bid.call })), seated.map((member) => member.id), viewer.id),
+        suggestCall(viewer.biddingSystem ?? DEFAULT_BIDDING_SYSTEM, hand, ((board.bids as Array<{ seat_id: string; call: string }> | undefined) ?? []).map((bid) => ({ seatId: bid.seat_id, call: bid.call })), seated.map((member) => member.id), viewer.id, viewerVulnerable),
         legalActions, legalPlays)
       : null;
     return {

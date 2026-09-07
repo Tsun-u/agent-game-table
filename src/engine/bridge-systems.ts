@@ -22,20 +22,23 @@ const isSuit = (strain: string): strain is Suit => SUITS.some((s) => s === strai
 const major = (s: Suit): boolean => s === "♠" || s === "♥";
 const between = (n: number, low: number, high: number): boolean => n >= low && n <= high;
 
-function evaluate(hand: readonly string[]) {
+function evaluate(hand: readonly string[], vulnerable: boolean) {
   const hcp = highCardPoints(hand);
   const lengths = Object.fromEntries(SUITS.map((s) => [s, hand.filter((c) => c.startsWith(s)).length])) as Record<Suit, number>;
   const sorted = [...SUITS].sort((a, b) => lengths[b] - lengths[a]);
   const balanced = SUITS.every((s) => lengths[s] >= 2) && SUITS.filter((s) => lengths[s] === 2).length <= 1;
   const cards = (s: Suit) => `${NUMBERS[lengths[s]]}張${NAMES[s]}`;
   const hint = (call: string, why: string): BidHint => ({ call, reason: `${hcp} 點、${why}，建議 ${call}` });
-  return { hcp, lengths, sorted, balanced, cards, hint };
+  // A vulnerable preempt needs two of the top three honors; the extra undertrick cost is too high otherwise.
+  const preemptable = (s: Suit): boolean => !vulnerable || ["A", "K", "Q"].filter((rank) => hand.includes(`${s}${rank}`)).length >= 2;
+  const vulnerability = vulnerable ? "有身價" : "無身價";
+  return { hcp, lengths, sorted, balanced, vulnerable, vulnerability, preemptable, cards, hint };
 }
 type Hand = ReturnType<typeof evaluate>;
 const lowest = (s: Suit, above: string): string => BIDS.find((b) => bidStrain(b) === s && bidRank(b) > bidRank(above))!;
 
 function opening(system: BiddingSystemKey, h: Hand): BidHint | null {
-  const { hcp: p, lengths: n, balanced, sorted, cards, hint } = h;
+  const { hcp: p, lengths: n, balanced, sorted, vulnerability, preemptable, cards, hint } = h;
   if (balanced) {
     if (between(p, 25, 27)) return hint("3NT", "平均牌型");
     if (between(p, 20, 21)) return hint("2NT", "平均牌型");
@@ -54,8 +57,14 @@ function opening(system: BiddingSystemKey, h: Hand): BidHint | null {
     return hint(`1${s}`, `${cards(s)}、低花三張制`);
   }
   const weak = sorted.find((s) => s !== "♣" && n[s] === 6 && SUITS.every((other) => other === s || !major(other) || n[other] < 4));
-  if (between(p, 5, 11) && weak) return hint(`2${weak}`, `${cards(weak)}、弱二開叫`);
-  if (p <= 10 && n[sorted[0]!] >= 7) return hint(`3${sorted[0]!}`, `${cards(sorted[0]!) }、阻擊開叫`);
+  if (between(p, 5, 11) && weak) {
+    if (preemptable(weak)) return hint(`2${weak}`, `${cards(weak)}、${vulnerability}、弱二開叫`);
+    return hint("PASS", `${cards(weak)}、有身價但沒有兩張大牌、不開弱二`);
+  }
+  if (p <= 10 && n[sorted[0]!] >= 7) {
+    if (preemptable(sorted[0]!)) return hint(`3${sorted[0]!}`, `${cards(sorted[0]!)}、${vulnerability}、阻擊開叫`);
+    return hint("PASS", `${cards(sorted[0]!)}、有身價但沒有兩張大牌、不阻擊`);
+  }
   return hint("PASS", "不夠開叫");
 }
 
@@ -196,23 +205,25 @@ function rebid(open: string, reply: string, h: Hand): BidHint | null {
 }
 
 function overcall(open: string, highest: string, h: Hand): BidHint | null {
-  const { hcp: p, lengths: n, balanced, sorted, cards, hint } = h;
+  const { hcp: p, lengths: n, balanced, sorted, vulnerable, vulnerability, preemptable, cards, hint } = h;
   const s = bidStrain(open);
   if (bidLevel(open) !== 1 || !isSuit(s)) return null;
   if (between(p, 15, 18) && balanced && n[s] >= 2) return hint("1NT", `平均牌型、${cards(s)}`);
   const weak = sorted.find((t) => t !== s && n[t] === 6);
-  if (between(p, 5, 11) && weak) return hint(`${bidLevel(lowest(weak, highest)) + 1}${weak}`, `${cards(weak)}、弱跳蓋叫`);
+  if (between(p, 5, 11) && weak && preemptable(weak)) return hint(`${bidLevel(lowest(weak, highest)) + 1}${weak}`, `${cards(weak)}、${vulnerability}、弱跳蓋叫`);
   if (p >= 12 && n[s] <= 2 && SUITS.every((t) => t === s || n[t] >= 3)) return hint("X", `${cards(s)}、其餘三門至少三張、技術性 Double`);
   const long = sorted.find((t) => t !== s && n[t] >= 5);
   if (long) {
     const level = bidRank(`1${long}`) > bidRank(open) ? 1 : 2;
-    if (p >= (level === 1 ? 8 : 10)) return hint(`${level}${long}`, `${cards(long)}、自然爭叫`);
+    const floor = level === 1 ? 8 : vulnerable ? 11 : 10;
+    if (p >= floor) return hint(`${level}${long}`, `${cards(long)}、自然爭叫`);
+    if (level === 2 && vulnerable && p >= 10) return hint("PASS", `${cards(long)}、有身價二線爭叫要 11 點`);
   }
   return hint("PASS", "未符合爭叫條件");
 }
 
 // First and second batches: null here means the situation needs a later group.
-function existingCall(system: BiddingSystemKey, hand: readonly string[], auction: readonly AuctionCall[], order: readonly string[], viewerSeatId: string): BidHint | null {
+function existingCall(system: BiddingSystemKey, hand: readonly string[], auction: readonly AuctionCall[], order: readonly string[], viewerSeatId: string, vulnerable: boolean): BidHint | null {
   const partner = order[(order.indexOf(viewerSeatId) + 2) % 4]!;
   const rightOpponent = order[(order.indexOf(viewerSeatId) + 3) % 4]!;
   const opponent = (seat: string) => seat !== viewerSeatId && seat !== partner;
@@ -221,7 +232,7 @@ function existingCall(system: BiddingSystemKey, hand: readonly string[], auction
   const mine = auction.filter((a) => a.seatId === viewerSeatId);
   const partners = auction.filter((a) => a.seatId === partner);
   const highest = bids.reduce<AuctionCall | undefined>((best, a) => !best || bidRank(a.call) > bidRank(best.call) ? a : best, undefined);
-  const h = evaluate(hand);
+  const h = evaluate(hand, vulnerable);
   const afterOpening = first ? auction.slice(auction.indexOf(first)) : [];
   const rightPassed = afterOpening.at(-1)?.seatId === rightOpponent && afterOpening.at(-1)?.call === "PASS";
   const oneSuitOpening = first && bidLevel(first.call) === 1 && isSuit(bidStrain(first.call));
@@ -529,9 +540,10 @@ function generalRound(a: Auction, system: BiddingSystemKey, h: Hand): BidHint {
   return pass();
 }
 
-export function suggestCall(system: BiddingSystemKey, hand: readonly string[], auction: readonly AuctionCall[], order: readonly string[], viewerSeatId: string): BidHint | null {
-  const a = auctionView(auction, order, viewerSeatId), h = evaluate(hand);
-  const result = existingCall(system, hand, auction, order, viewerSeatId) ?? fixedCall(system, hand, a, h) ?? generalRound(a, system, h);
+// `vulnerable` is the viewer's own side: it tightens preempts and two-level overcalls.
+export function suggestCall(system: BiddingSystemKey, hand: readonly string[], auction: readonly AuctionCall[], order: readonly string[], viewerSeatId: string, vulnerable = false): BidHint | null {
+  const a = auctionView(auction, order, viewerSeatId), h = evaluate(hand, vulnerable);
+  const result = existingCall(system, hand, auction, order, viewerSeatId, vulnerable) ?? fixedCall(system, hand, a, h) ?? generalRound(a, system, h);
   if (result.call === "PASS") return result;
   const highest = a.highest;
   if (result.call === "X" || result.call === "XX") {

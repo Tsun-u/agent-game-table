@@ -940,8 +940,7 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
       stock.append(top, label);
       pieces.push(stock);
     }
-    pieces.push(trick);
-    if (board.dummy_hand) pieces.unshift(dummyArea(table, nameOf));
+    pieces.push(board.dummy_hand ? bridgeStage(table, trick, slotOf, nameOf) : trick);
     elements.pileCards.replaceChildren(...pieces);
 
     const leader = board.trick ? nameOf(board.trick.leader_seat_id) : "";
@@ -965,6 +964,21 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     } else {
       elements.pileLabel.textContent = "等待開局";
     }
+  }
+
+  /** 合約橋牌的桌面：本墩在中央，夢家的牌擺在夢家真正的方位；夢家是自己時牌已在下方手牌區，不再重畫。 */
+  function bridgeStage(table, trick, slotOf, nameOf) {
+    const stage = document.createElement("div");
+    stage.className = "bridge-stage";
+    stage.append(trick);
+    const dummySeatId = table.board.contract?.dummy_seat_id;
+    const dummyIsYou = table.players.some((seat) => seat.seat_id === dummySeatId && seat.is_you);
+    if (dummySeatId && !dummyIsYou) {
+      const dummy = dummyArea(table, nameOf);
+      dummy.dataset.slot = slotOf(dummySeatId);
+      stage.append(dummy);
+    }
+    return stage;
   }
 
   /** 夢家攤牌區：首攻後所有人都看得到；自己是莊家且輪到夢家時，legal_plays 列的是夢家的牌，點了就替夢家出。 */
