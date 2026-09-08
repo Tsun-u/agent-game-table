@@ -146,13 +146,14 @@ test("each Agent receives independent turn events and only its own hand", async 
   const secondWait = store.waitForAgentEvents(second.agent_token, 2_000);
   store.humanAction(owner.human_token, "play_cards", opened.version, "owner-play-01", ["♣3"]);
   const [firstNotice, secondNotice] = await Promise.all([firstWait, secondWait]);
-  for (const notice of [firstNotice, secondNotice]) {
-    assert.equal(notice.timed_out, false);
-    assert.equal(notice.events.some((event) => event.kind === "cards_played" && event.actor_name === "阿童"), true);
-    const you = notice.table.players.find((seat) => seat.is_you)!;
-    assert.equal(you.cards.length, you.hand_count);
-    for (const other of notice.table.players.filter((seat) => !seat.is_you)) assert.deepEqual(other.cards, []);
-  }
+  assert.equal(secondNotice.timed_out, true, "another player's card alone does not wake a seat whose turn has not come");
+  assert.deepEqual(secondNotice.events, []);
+  assert.equal(firstNotice.timed_out, false);
+  assert.equal(firstNotice.your_turn, true);
+  assert.equal(firstNotice.events.some((event) => event.kind === "cards_played" && event.actor_name === "阿童"), true);
+  const you = firstNotice.table.players.find((seat) => seat.is_you)!;
+  assert.equal(you.cards.length, you.hand_count);
+  for (const other of firstNotice.table.players.filter((seat) => !seat.is_you)) assert.deepEqual(other.cards, []);
   assert.equal(firstNotice.table.active_seat_id, first.table.viewer_seat_id);
   assert.deepEqual(firstNotice.table.legal_actions, ["play_cards", "pass"]);
   assert.equal(firstNotice.table.legal_plays.length > 0, true);

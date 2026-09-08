@@ -335,7 +335,7 @@ test("MCP Agents see every seat pending during Hearts passing and can pass three
   assert.equal(tableFrom(passed).pending_seat_ids.length, 3);
 });
 
-test("wait_for_table_event stays tiny on timeout and returns a slim table when events arrive", async (context) => {
+test("wait_for_table_event stays tiny on timeout, returns only event lines for chat, and a slim table on your turn", async (context) => {
   const store = new MultiplayerTableStore(() => createDeck());
   const host = await startAgentGameTableHost({ port: 0, store });
   context.after(() => host.close());
@@ -349,11 +349,24 @@ test("wait_for_table_event stays tiny on timeout and returns a slim table when e
   assert.equal(idleContent.your_turn, false);
   store.humanSay(created.human_token, "大家好", "slim-say");
   const woke = await client.callTool({ name: "wait_for_table_event", arguments: { timeout_seconds: 2 } });
-  const wokeContent = woke.structuredContent as { events: Array<{ kind: string }>; table: Record<string, unknown> & { players: Array<Record<string, unknown>>; recent_chat: unknown[] } };
+  const wokeContent = woke.structuredContent as { events: Array<{ kind: string }>; your_turn: boolean; table?: unknown };
   assert.equal(wokeContent.events.some((event) => event.kind === "message"), true);
-  assert.equal("rule_options" in wokeContent.table, false, "slim table drops table-level metadata");
-  assert.equal(wokeContent.table.players.every((seat) => !("cards" in seat)), true);
-  assert.equal(wokeContent.table.recent_chat.length <= 5, true);
+  assert.equal(wokeContent.your_turn, false);
+  assert.equal(wokeContent.table, undefined, "chat alone brings the event lines, not a table");
+
+  store.humanTakeSeat(created.human_token, store.getHumanView(created.human_token).version, "slim-owner-seat");
+  await client.callTool({ name: "take_seat", arguments: { expected_version: store.getHumanView(created.human_token).version, idempotency_key: "slim-agent-seat" } });
+  const opened = store.startRound(created.human_token, store.getHumanView(created.human_token).version, "slim-start");
+  await client.callTool({ name: "wait_for_table_event", arguments: { timeout_seconds: 0 } });
+  store.humanAction(created.human_token, "play_cards", opened.version, "slim-owner-play", ["♣3"]);
+  const turn = await client.callTool({ name: "wait_for_table_event", arguments: { timeout_seconds: 2 } });
+  const turnContent = turn.structuredContent as { events: Array<{ kind: string }>; your_turn: boolean; table: Record<string, unknown> & { players: Array<Record<string, unknown>>; recent_chat: unknown[]; legal_plays: unknown[] } };
+  assert.equal(turnContent.your_turn, true);
+  assert.equal(turnContent.events.some((event) => event.kind === "cards_played"), true, "the cards played before your turn arrive with it");
+  assert.equal("rule_options" in turnContent.table, false, "slim table drops table-level metadata");
+  assert.equal(turnContent.table.players.every((seat) => !("cards" in seat)), true);
+  assert.equal(turnContent.table.recent_chat.length <= 5, true);
+  assert.equal(turnContent.table.legal_plays.length > 0, true);
 });
 
 test("MCP Agents can sit by chair at a Contract Bridge table, finish the auction and see the dummy", async (context) => {

@@ -195,6 +195,7 @@ export interface CloseTableResult {
 export interface AgentEventResult {
   readonly timed_out: boolean;
   readonly events: TableEvent[];
+  readonly your_turn: boolean;
   readonly table: PublicTableView;
 }
 
@@ -277,6 +278,11 @@ export type MultiplayerDeckFactory = (round: number, seatCount: number) => reado
 
 const MAX_MEMBERS = 16;
 const EVENT_CAP = 500;
+/** 這些桌面級事件就算還沒輪到自己也要叫醒 Agent；引擎的出牌與輪替事件先累積，輪到自己時一起送達。 */
+const WAKE_EVENT_KINDS = new Set([
+  "message", "seat_joined", "seat_left", "seat_taken", "seat_vacated", "seat_reconnected", "substitute_invited", "substitute_accepted",
+  "round_started", "round_ended", "game_over", "match_reset", "bidding_system", "table_created",
+]);
 /** long poll 上限；Cloudflare 代理 125 秒就回 524，所以留在 100 秒以內。 */
 const MAX_WAIT_MS = 100_000;
 const CHAT_CAP = 100;
@@ -818,8 +824,8 @@ export class MultiplayerTableStore {
 
   async waitForAgentEvents(agentToken: string, timeoutMs: number): Promise<AgentEventResult> {
     const { table, session } = this.#tableForAgent(agentToken);
-    const immediate = this.#consumeUnreadEvents(table, session);
-    if (immediate.length) {
+    const immediate = this.#wakeEvents(table, session);
+    if (immediate) {
       this.#persist();
       return this.#eventResult(table, session, immediate, false);
     }
@@ -1053,22 +1059,33 @@ export class MultiplayerTableStore {
     for (const [tokenHash, waiter] of table.waiters) {
       const session = table.agentSessions.get(tokenHash);
       if (!session) continue;
-      const unread = this.#consumeUnreadEvents(table, session);
-      if (!unread.length) continue;
+      const unread = this.#wakeEvents(table, session);
+      if (!unread) continue;
       clearTimeout(waiter.timer);
       table.waiters.delete(tokenHash);
       waiter.resolve(this.#eventResult(table, session, unread, false));
     }
   }
 
-  #consumeUnreadEvents(table: Table, session: AgentSession): TableEvent[] {
+  /** 輪到自己或有桌面級事件才推進游標並回傳未讀事件；只有別人出牌時回 null，讓等待繼續。 */
+  #wakeEvents(table: Table, session: AgentSession): TableEvent[] | null {
     const unread = table.events.filter((event) => event.event_id > session.cursor);
-    if (unread.length) session.cursor = unread.at(-1)!.event_id;
-    return unread.filter((event) => event.actor_seat_id !== session.seatId).map((event) => ({ ...event }));
+    const others = unread.filter((event) => event.actor_seat_id !== session.seatId);
+    if (!others.length) {
+      if (unread.length) session.cursor = unread.at(-1)!.event_id;
+      return null;
+    }
+    if (!this.#isAgentTurn(table, session) && !others.some((event) => WAKE_EVENT_KINDS.has(event.kind))) return null;
+    session.cursor = unread.at(-1)!.event_id;
+    return others.map((event) => ({ ...event }));
+  }
+
+  #isAgentTurn(table: Table, session: AgentSession): boolean {
+    return table.phase === "in_round" && table.game !== null && this.#engine(table).pendingSeatIds(table.game).includes(session.seatId);
   }
 
   #eventResult(table: Table, session: AgentSession, events: TableEvent[], timedOut: boolean): AgentEventResult {
-    return { timed_out: timedOut, events, table: this.#view(table, session.seatId) };
+    return { timed_out: timedOut, events, your_turn: this.#isAgentTurn(table, session), table: this.#view(table, session.seatId) };
   }
 
   #tableForHuman(token: string): { table: Table; seat: Seat } {
