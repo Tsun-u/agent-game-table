@@ -51,6 +51,7 @@
     questionDraft: "",
     questionNotice: "",
     claimChoices: [],
+    wordBoardKey: "",
     /** GET /api/games 的結果：mode → { label, options[] }，開桌表單與規則說明都靠它。 */
     games: {},
     defaultMode: "bigtwo",
@@ -942,6 +943,9 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     const previousFocus = document.activeElement;
     const inputName = elements.pileCards.contains(previousFocus) ? previousFocus.dataset.wordInput : null;
     const caret = inputName ? previousFocus.selectionStart : null;
+    const boardKey = wordBoardKey(table);
+    if (inputName && boardKey === state.wordBoardKey) return;
+    state.wordBoardKey = boardKey;
     const root = wordElement("div", "word-content");
     const nameOf = (id) => table.players.find((seat) => seat.seat_id === id)?.name ?? id;
     const heading = wordElement("div", "word-heading");
@@ -1023,6 +1027,13 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
     }
     const chain = root.querySelector(".word-chain");
     if (chain) chain.scrollTop = chain.scrollHeight;
+  }
+
+  /** 盤面內容的指紋：聊天和別人交卷都不會改變它。打字中遇到同一個指紋就不重畫，換掉輸入框會打斷輸入法選字、收起手機鍵盤。 */
+  function wordBoardKey(table) {
+    const { submitted: _submitted, ...board } = table.board;
+    return JSON.stringify([table.table_id, table.mode, table.phase, table.round, table.viewer_role, table.turn_deadline_at,
+      table.legal_actions, board, state.claimChoices, state.questionNotice]);
   }
 
   function wordSubmitForm(table) {
