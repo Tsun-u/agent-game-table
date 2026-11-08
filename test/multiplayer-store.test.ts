@@ -439,3 +439,210 @@ test("合約橋牌：叫牌階段只有輪到的人拿到 bid_hint，而且建�
   assert.match(hint.reason, /點/);
   assert.equal(store.getHumanView(tokens[1]!).bid_hint, null, "還沒輪到的人沒有建議");
 });
+
+function wordTable(store: MultiplayerTableStore, mode = "saysamething", options: unknown = { turn_seconds: 30 }) {
+  const owner = store.createTable("阿童", options, mode);
+  seatHuman(store, owner.human_token);
+  const agent = store.joinAgent(owner.table.join_code, "小葵");
+  seatAgent(store, agent.agent_token);
+  const spectator = store.joinHuman(owner.table.join_code, "小蝶");
+  const view = store.startRound(owner.human_token, tableVersion(store, owner.human_token), "start-word-game");
+  return { owner, agent, spectator, view };
+}
+
+test("觀眾動作：人類與 Agent 的冪等、版本及入座者交由引擎拒絕", () => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  try {
+    const { owner, agent, spectator, view } = wordTable(store, "syncquiz", { turn_seconds: 0 });
+    const watcher = store.joinAgent(view.join_code, "觀眾阿宇");
+    const version = store.getHumanView(spectator.human_token).version;
+    const first = store.humanAudienceAction(spectator.human_token, "submit_question", version, "human-question-01", ["  野餐帶什麼？  "]);
+    assert.equal(first.version, version + 1);
+    assert.equal(first.board.queue_length, 1);
+    assert.deepEqual(store.humanAudienceAction(spectator.human_token, "submit_question", version, "human-question-01", ["野餐帶什麼？"]), first);
+    assert.throws(() => store.humanAudienceAction(spectator.human_token, "submit_question", version, "human-question-02", ["早餐？"]), /版本衝突/);
+    assert.throws(() => store.humanAudienceAction(spectator.human_token, "submit_question", first.version, "human-question-01", ["不同題目"]), /不同操作/);
+    const second = store.agentAudienceAction(watcher.agent_token, "submit_question", first.version, "agent-question-01", ["早餐吃什麼？"]);
+    assert.equal(second.board.queue_length, 2);
+    assert.deepEqual(store.agentAudienceAction(watcher.agent_token, "submit_question", first.version, "agent-question-01", ["早餐吃什麼？"]), second);
+    assert.throws(() => store.agentAction(watcher.agent_token, "submit_question", second.version, "agent-question-01", ["早餐吃什麼？"]), /不同操作/);
+    assert.throws(() => store.humanAudienceAction(owner.human_token, "submit_question", second.version, "seated-question-01", ["題目"]), /入座者不能出題/);
+    assert.throws(() => store.agentAudienceAction(agent.agent_token, "submit_question", second.version, "seated-question-02", ["題目"]), /入座者不能出題/);
+  } finally {
+    store.close();
+  }
+});
+
+test("觀眾動作：還沒開過局與沒有觀眾介面的遊戲報錯", () => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  const owner = store.createTable("阿童", {}, "syncquiz");
+  const agent = store.joinAgent(owner.table.join_code, "小葵");
+  const version = store.getHumanView(owner.human_token).version;
+  assert.throws(() => store.humanAudienceAction(owner.human_token, "submit_question", version, "before-start-human", ["題目"]), /局開始後才能出題/);
+  assert.throws(() => store.agentAudienceAction(agent.agent_token, "submit_question", version, "before-start-agent", ["題目"]), /局開始後才能出題/);
+  const other = wordTable(store, "bigtwo", {});
+  assert.throws(() => store.humanAudienceAction(other.spectator.human_token, "submit_question", other.view.version, "unsupported-game", ["題目"]), /這個遊戲不支援觀眾動作/);
+  store.close();
+});
+
+test("觀眾出題：waiting_question 保持局中、出題啟動計時並喚醒 Agent", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const store = new MultiplayerTableStore(() => createDeck());
+  context.after(() => store.close());
+  const { owner, agent, spectator, view } = wordTable(store, "syncquiz", { audience_only: true });
+  assert.equal(view.phase, "in_round");
+  assert.equal(view.board.phase, "waiting_question");
+  assert.equal(view.turn_deadline_at, null);
+  await store.waitForAgentEvents(agent.agent_token, 0);
+  const waiting = store.waitForAgentEvents(agent.agent_token, 90_000);
+  const next = store.humanAudienceAction(spectator.human_token, "submit_question", view.version, "wake-question-01", ["午餐吃什麼？"]);
+  assert.equal(next.board.phase, "answering");
+  assert.match(next.turn_deadline_at!, /\+08:00$/);
+  const notice = await waiting;
+  assert.equal(notice.your_turn, true);
+  assert.equal(notice.table.version, next.version);
+  assert.deepEqual(next.board.question, { text: "午餐吃什麼？", author: "小蝶" });
+  context.mock.timers.tick(30_000);
+  const after = store.getHumanView(owner.human_token);
+  assert.equal(after.board.phase, "waiting_question");
+  assert.equal(after.turn_deadline_at, null);
+});
+
+test("默契考驗：局間出題、剩餘佇列與快照可帶到下一局及整場重來", () => {
+  let snapshot: any;
+  const persistence = { load: () => snapshot ? structuredClone(snapshot) : null, save: (value: unknown) => { snapshot = structuredClone(value); } };
+  const store = new MultiplayerTableStore(() => createDeck(), { persistence });
+  const { owner, agent, spectator } = wordTable(store, "syncquiz", { questions_per_round: 3, turn_seconds: 0 });
+  let view = store.getHumanView(owner.human_token);
+  for (let i = 0; i < 3; i++) {
+    view = store.humanAction(owner.human_token, "submit_answer", view.version, `carry-human-${i}`, ["飯"]);
+    view = store.agentAction(agent.agent_token, "submit_answer", view.version, `carry-agent-${i}`, ["飯"]);
+  }
+  view = store.humanAction(owner.human_token, "finish_round", view.version, "carry-finish-human");
+  view = store.agentAction(agent.agent_token, "finish_round", view.version, "carry-finish-agent");
+  assert.equal(view.phase, "ended");
+  view = store.humanAudienceAction(spectator.human_token, "submit_question", view.version, "between-question-1", ["下一局題目"]);
+  view = store.humanAudienceAction(spectator.human_token, "submit_question", view.version, "between-question-2", ["剩餘題目"]);
+  snapshot.tables[0].phase = "game_over";
+  store.close();
+  const restored = new MultiplayerTableStore(() => createDeck(), { persistence });
+  try {
+    view = restored.startRound(owner.human_token, view.version, "carry-next-round");
+    assert.equal(view.round, 1);
+    assert.deepEqual(view.board.question, { text: "下一局題目", author: "小蝶" });
+    assert.equal(view.board.queue_length, 1);
+    assert.ok(view.players.every((seat) => seat.game_score === 0));
+  } finally {
+    restored.close();
+  }
+});
+
+test("回合計時：已交卷不延後期限，逾時揭曉、版本加一、喚醒與存檔", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  let saved: any;
+  const store = new MultiplayerTableStore(() => createDeck(), { persistence: { load: () => null, save: (s) => { saved = structuredClone(s); } } });
+  context.after(() => store.close());
+  const { owner, agent, view } = wordTable(store);
+  await store.waitForAgentEvents(agent.agent_token, 0);
+  context.mock.timers.tick(10_000);
+  const submitted = store.agentAction(agent.agent_token, "submit_word", view.version, "timed-word-submit", ["玉兔"]);
+  assert.equal(submitted.turn_deadline_at, view.turn_deadline_at);
+  await store.waitForAgentEvents(agent.agent_token, 0);
+  const waiting = store.waitForAgentEvents(agent.agent_token, 90_000);
+  context.mock.timers.tick(19_999);
+  assert.equal(store.getHumanView(owner.human_token).version, submitted.version);
+  context.mock.timers.tick(1);
+  const after = store.getHumanView(owner.human_token);
+  assert.equal(after.version, submitted.version + 1);
+  const chain = after.board.chain as { words: Record<string, string | null> }[];
+  assert.deepEqual(chain[0]!.words, { [owner.table.viewer_seat_id]: null, [agent.table.viewer_seat_id]: "玉兔" });
+  assert.equal((await waiting).your_turn, true);
+  assert.equal(saved.tables[0].version, after.version);
+  assert.equal(saved.tables[0].turnDeadlineAt, after.turn_deadline_at);
+  assert.ok(saved.tables[0].turnTimerKey);
+});
+
+test("回合計時：切換 key 取消舊計時，投票逾時後重新計時", (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const store = new MultiplayerTableStore(() => createDeck());
+  context.after(() => store.close());
+  const { owner, agent, view } = wordTable(store);
+  let next = store.humanAction(owner.human_token, "submit_word", view.version, "key-word-human", ["玉兔"]);
+  next = store.agentAction(agent.agent_token, "submit_word", next.version, "key-word-agent", ["月兔"]);
+  context.mock.timers.tick(10_000);
+  next = store.humanAction(owner.human_token, "claim_same", next.version, "key-claim-same");
+  const judgingVersion = next.version;
+  const judgingDeadline = next.turn_deadline_at;
+  context.mock.timers.tick(20_000);
+  next = store.getHumanView(owner.human_token);
+  assert.equal(next.board.phase, "judging");
+  assert.equal(next.version, judgingVersion);
+  assert.equal(next.turn_deadline_at, judgingDeadline);
+  context.mock.timers.tick(10_000);
+  next = store.getHumanView(owner.human_token);
+  assert.equal(next.board.phase, "writing");
+  assert.equal(next.version, judgingVersion + 1);
+  assert.notEqual(next.turn_deadline_at, judgingDeadline);
+});
+
+for (const elapsed of [10_000, 40_000]) test(`快照還原：保留截止時間，經過 ${elapsed} 毫秒後重新排程或立即到期`, (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  let snapshot: unknown = null;
+  const persistence = { load: () => structuredClone(snapshot), save: (s: unknown) => { snapshot = structuredClone(s); } };
+  const original = new MultiplayerTableStore(() => createDeck(), { persistence });
+  const { owner, agent, view } = wordTable(original);
+  const submitted = original.agentAction(agent.agent_token, "submit_word", view.version, "restore-word-submit", ["玉兔"]);
+  original.close();
+  context.mock.timers.tick(elapsed);
+  const restored = new MultiplayerTableStore(() => createDeck(), { persistence });
+  context.after(() => restored.close());
+  if (elapsed < 30_000) {
+    assert.equal(restored.getHumanView(owner.human_token).turn_deadline_at, submitted.turn_deadline_at);
+    context.mock.timers.tick(19_999);
+    assert.equal(restored.getHumanView(owner.human_token).version, submitted.version);
+    context.mock.timers.tick(1);
+  }
+  const after = restored.getHumanView(owner.human_token);
+  assert.equal(after.board.turn, 2);
+  assert.equal(after.version, submitted.version + 1);
+  assert.equal((after.board.chain as unknown[]).length, 1);
+});
+
+test("回合計時：結算、離桌、刪桌與 Host 關閉都清除計時", (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const store = new MultiplayerTableStore(() => createDeck());
+  const settled = wordTable(store);
+  let view = store.humanAction(settled.owner.human_token, "submit_word", settled.view.version, "settle-human", ["同"]);
+  view = store.agentAction(settled.agent.agent_token, "submit_word", view.version, "settle-agent", ["同"]);
+  assert.equal(view.turn_deadline_at, null);
+  const departed = wordTable(store);
+  store.leaveAgent(departed.agent.agent_token);
+  assert.equal(store.getHumanView(departed.owner.human_token).turn_deadline_at, null);
+  const deleted = wordTable(store);
+  store.closeTable(deleted.view.table_id);
+  const closed = wordTable(store);
+  const version = closed.view.version;
+  store.close();
+  context.mock.timers.tick(60_000);
+  assert.equal(store.getHumanView(settled.owner.human_token).version, view.version);
+  assert.equal(store.getHumanView(closed.owner.human_token).version, version);
+  assert.throws(() => store.getHumanView(deleted.owner.human_token), /憑證無效|找不到/);
+});
+
+test("聯想收束：交卷後仍可提上一輪同義，投票可喚醒已等待的 Agent", async (context) => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  context.after(() => store.close());
+  const { owner, agent, view } = wordTable(store, "saysamething", { turn_seconds: 0 });
+  let next = store.humanAction(owner.human_token, "submit_word", view.version, "claim-word-human", ["玉兔"]);
+  next = store.agentAction(agent.agent_token, "submit_word", next.version, "claim-word-agent", ["月兔"]);
+  next = store.humanAction(owner.human_token, "submit_word", next.version, "claim-next-human", ["新詞"]);
+  await store.waitForAgentEvents(agent.agent_token, 0);
+  const waiting = store.waitForAgentEvents(agent.agent_token, 90_000);
+  next = store.humanAction(owner.human_token, "claim_same", next.version, "claim-after-submit");
+  assert.equal(next.board.phase, "judging");
+  const notice = await waiting;
+  assert.equal(notice.your_turn, true);
+  assert.equal(notice.table.board.phase, "judging");
+  next = store.agentAction(agent.agent_token, "agree_same", next.version, "claim-agent-agree");
+  assert.equal(next.phase, "ended");
+});

@@ -12,6 +12,7 @@ export interface AgentGameTableAgentHost {
     idempotencyKey: string,
     cards?: readonly string[],
   ): Promise<PublicTableView>;
+  agentAudienceAction(agentToken: string, action: TurnAction, expectedVersion: number, idempotencyKey: string, cards?: readonly string[]): Promise<PublicTableView>;
   agentSay(agentToken: string, message: string, idempotencyKey: string): Promise<PublicTableView>;
   takeSeat(agentToken: string, expectedVersion: number, idempotencyKey: string, position?: number, biddingSystem?: string): Promise<PublicTableView>;
   setBiddingSystem(agentToken: string, biddingSystem: string, idempotencyKey: string): Promise<PublicTableView>;
@@ -71,6 +72,14 @@ export class AgentGameTableHostClient implements AgentGameTableAgentHost {
     const result = await this.#request<{ table: PublicTableView }>("/api/agent/action", {
       method: "POST",
       token: agentToken,
+      body: { action, cards, expected_version: expectedVersion, idempotency_key: idempotencyKey },
+    });
+    return result.table;
+  }
+
+  async agentAudienceAction(agentToken: string, action: TurnAction, expectedVersion: number, idempotencyKey: string, cards: readonly string[] = []): Promise<PublicTableView> {
+    const result = await this.#request<{ table: PublicTableView }>("/api/agent/audience", {
+      method: "POST", token: agentToken,
       body: { action, cards, expected_version: expectedVersion, idempotency_key: idempotencyKey },
     });
     return result.table;

@@ -90,6 +90,8 @@ export interface PublicTableView {
   readonly active_seat_id: string | null;
   /** 現在可以行動的席位；傳牌、叫牌類階段可以同時多個。 */
   readonly pending_seat_ids: string[];
+  /** 本階段截止時間（台北時間），不計時為 null。 */
+  readonly turn_deadline_at: string | null;
   readonly players: PublicSeatView[];
   readonly spectators: PublicSpectatorView[];
   /** 有椅子的遊戲才有值；沒有椅子的遊戲入座順序就是座位順序。 */
@@ -253,6 +255,9 @@ interface Table {
   round: number;
   /** 引擎的一局狀態；lobby 或還沒開過局時是 null。 */
   game: unknown | null;
+  turnTimerKey: string | null;
+  turnDeadlineAt: string | null;
+  turnTimer: NodeJS.Timeout | null;
   readonly seats: Seat[];
   readonly agentSessions: Map<string, AgentSession>;
   readonly events: TableEvent[];
@@ -308,6 +313,7 @@ export class MultiplayerTableStore {
     this.#persistence = options.persistence;
     const snapshot = this.#persistence?.load();
     if (snapshot) this.#restore(snapshot);
+    for (const table of this.#tables.values()) this.#syncTurnTimer(table);
   }
 
   createTable(humanName: string, options: unknown = undefined, mode: GameMode = DEFAULT_GAME_MODE): HumanTableResult {
@@ -322,7 +328,7 @@ export class MultiplayerTableStore {
     };
     const table: Table = {
       id, joinCode, ownerSeatId: humanSeat.id, mode: engine.mode, options: engine.normalizeOptions(options), nextSeatIndex: 0, phase: "lobby", version: 1, round: 0,
-      game: null, seats: [humanSeat], agentSessions: new Map(), events: [], chat: [],
+      game: null, turnTimerKey: null, turnDeadlineAt: null, turnTimer: null, seats: [humanSeat], agentSessions: new Map(), events: [], chat: [],
       nextEventId: 1, receipts: new Map(), waiters: new Map(), reconnectTickets: new Map(), substituteInvites: new Map(),
     };
     this.#tables.set(id, table);
@@ -365,6 +371,7 @@ export class MultiplayerTableStore {
   closeTable(tableId: string): CloseTableResult {
     const table = this.#requireTable(tableId);
     const summary = this.#managedSummary(table);
+    this.#clearTurnTimer(table);
     for (const [tokenHash, waiter] of table.waiters) {
       const session = table.agentSessions.get(tokenHash);
       clearTimeout(waiter.timer);
@@ -670,6 +677,7 @@ export class MultiplayerTableStore {
     table.substituteInvites.delete(seat.id);
     for (const [inviteeId, pending] of table.substituteInvites) if (pending.fromSeatId === from.id) table.substituteInvites.delete(inviteeId);
     table.version += 1;
+    this.#syncTurnTimer(table);
     this.#appendEvent(table, "substitute_accepted", seat, `${seat.name} 接手 ${from.name} 的座位。`);
     const result = this.#remember(table, seat.id, idempotencyKey, operation, this.#view(table, seat.id));
     this.#flushWaiters(table);
@@ -757,6 +765,7 @@ export class MultiplayerTableStore {
     }
     for (const [inviteeId, invite] of table.substituteInvites) if (invite.fromSeatId === seat.id) table.substituteInvites.delete(inviteeId);
     table.version += 1;
+    this.#syncTurnTimer(table);
     this.#appendEvent(table, "seat_vacated", seat, `${seat.name} 起身到觀戰區。`);
     const result = this.#remember(table, seat.id, idempotencyKey, operation, this.#view(table, seat.id));
     this.#flushWaiters(table);
@@ -775,10 +784,12 @@ export class MultiplayerTableStore {
     const engine = this.#engine(table);
     const seated = seatedMembers(table);
     if (seated.length < engine.seats.min || seated.length > engine.seats.max) throw new Error(`${engine.label}需要 ${engine.seats.min} 到 ${engine.seats.max} 位入座的玩家才能開始。`);
+    const carry = table.game !== null ? engine.carryOver?.(table.game) : undefined;
     if (table.phase === "game_over") this.#resetMatch(table);
+    this.#clearTurnTimer(table);
     const round = table.round + 1;
     const deck = this.#deckFactory(round, seated.length).map((card) => typeof card === "string" ? parseCard(card) : card);
-    const dealt = engine.deal({ deck, seatIds: seated.map((seat) => seat.id), round }, table.options);
+    const dealt = engine.deal({ deck, seatIds: seated.map((seat) => seat.id), round, carry }, table.options);
     table.round = round;
     table.game = dealt.state;
     table.phase = "in_round";
@@ -817,6 +828,71 @@ export class MultiplayerTableStore {
     return this.#say(table, seat, text, idempotencyKey);
   }
 
+  humanAudienceAction(humanToken: string, action: TurnAction, expectedVersion: number, idempotencyKey: string, cards: readonly string[] = []): PublicTableView {
+    const { table, seat } = this.#tableForHuman(humanToken);
+    return this.#gameAction(table, seat, action, expectedVersion, idempotencyKey, cards, true);
+  }
+
+  agentAudienceAction(agentToken: string, action: TurnAction, expectedVersion: number, idempotencyKey: string, cards: readonly string[] = []): PublicTableView {
+    const { table, session } = this.#tableForAgent(agentToken);
+    return this.#gameAction(table, this.#requireSeat(table, session.seatId), action, expectedVersion, idempotencyKey, cards, true);
+  }
+
+  /** Host 關閉時釋放計時器；保留快照中的截止時間供下次啟動還原。 */
+  close(): void {
+    for (const table of this.#tables.values()) {
+      if (table.turnTimer) clearTimeout(table.turnTimer);
+      table.turnTimer = null;
+      for (const [tokenHash, waiter] of table.waiters) {
+        clearTimeout(waiter.timer);
+        table.waiters.delete(tokenHash);
+        const session = table.agentSessions.get(tokenHash);
+        if (session) waiter.resolve(this.#eventResult(table, session, [], true));
+      }
+    }
+  }
+
+  #clearTurnTimer(table: Table): void {
+    if (table.turnTimer) clearTimeout(table.turnTimer);
+    table.turnTimer = null;
+    table.turnTimerKey = null;
+    table.turnDeadlineAt = null;
+  }
+
+  #syncTurnTimer(table: Table): void {
+    const engine = this.#engine(table);
+    const requested = table.phase === "in_round" && table.game !== null
+      ? engine.turnTimer?.(table.game, table.options) : null;
+    if (!requested) {
+      this.#clearTurnTimer(table);
+      return;
+    }
+    if (requested.key === table.turnTimerKey && table.turnTimer !== null) return;
+    const deadline = requested.key === table.turnTimerKey && table.turnDeadlineAt !== null
+      ? table.turnDeadlineAt : taipeiIso(Date.now() + requested.seconds * 1000);
+    this.#clearTurnTimer(table);
+    table.turnTimerKey = requested.key;
+    table.turnDeadlineAt = deadline;
+    const expire = (): void => {
+      if (this.#tables.get(table.id) !== table || table.turnTimerKey !== requested.key || table.turnDeadlineAt !== deadline) return;
+      this.#clearTurnTimer(table);
+      this.#applyTransition(table, engine.onTimeout!(table.game, table.options));
+      table.version += 1;
+      this.#flushWaiters(table);
+      this.#persist();
+    };
+    const remaining = Date.parse(deadline) - Date.now();
+    if (remaining <= 0) {
+      expire();
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (table.turnTimer === timer) expire();
+    }, remaining);
+    table.turnTimer = timer;
+    timer.unref?.();
+  }
+
   agentSay(agentToken: string, text: string, idempotencyKey: string): PublicTableView {
     const { table, session } = this.#tableForAgent(agentToken);
     return this.#say(table, this.#requireSeat(table, session.seatId), text, idempotencyKey);
@@ -842,22 +918,42 @@ export class MultiplayerTableStore {
   }
 
   #seatAction(table: Table, seat: Seat, requestedAction: TurnAction, expectedVersion: number, idempotencyKey: string, cards: readonly string[]): PublicTableView {
-    // 有些 connector 快取了舊版工具清單，只會送大老二的 play_cards；其他遊戲把它當 play_card 的別名。
+    // 舊 connector 的 play_cards 在其他牌類遊戲視為 play_card。
     const action = requestedAction === "play_cards" && table.mode !== "bigtwo" ? "play_card" : requestedAction;
-    // 牌的順序對撿紅點有意義（手牌在前、桌面牌在後），只有冪等鍵用排序後的版本。
+    return this.#gameAction(table, seat, action, expectedVersion, idempotencyKey, cards, false);
+  }
+
+  #gameAction(table: Table, seat: Seat, action: TurnAction, expectedVersion: number, idempotencyKey: string, cards: readonly string[], audience: boolean): PublicTableView {
     const normalizedCards = cards.map((card) => card.trim()).filter(Boolean);
-    const operation = `take_action:${action}:${[...normalizedCards].sort().join(",")}`;
+    const channel = audience ? "audience_action" : "take_action";
+    const operation = `${channel}:${action}:${[...normalizedCards].sort().join(",")}`;
     const replay = this.#replay<PublicTableView>(table, seat.id, idempotencyKey, operation);
     if (replay) return replay;
     this.#assertVersion(table, expectedVersion);
     const engine = this.#engine(table);
-    if (table.phase !== "in_round" || table.game === null || !engine.pendingSeatIds(table.game).includes(seat.id)) throw new Error("現在不是你的回合。");
-    this.#applyTransition(table, engine.apply(table.game, seat.id, { action, cards: normalizedCards }, table.options));
+    let transition: EngineTransition<unknown>;
+    if (audience) {
+      if (table.game === null) throw new Error("局開始後才能出題");
+      if (!engine.audienceAction) throw new Error("這個遊戲不支援觀眾動作");
+      transition = engine.audienceAction(table.game, { id: seat.id, name: seat.name }, { action, cards: normalizedCards }, table.options);
+    } else {
+      if (!this.#canSeatAct(table, seat, action)) throw new Error("現在不是你的回合。");
+      transition = engine.apply(table.game, seat.id, { action, cards: normalizedCards }, table.options);
+    }
+    this.#applyTransition(table, transition);
     table.version += 1;
     const result = this.#remember(table, seat.id, idempotencyKey, operation, this.#view(table, seat.id));
     this.#flushWaiters(table);
     this.#persist();
     return result;
+  }
+
+  #canSeatAct(table: Table, seat: Seat, action: string): boolean {
+    if (!seat.seated || table.phase !== "in_round" || table.game === null) return false;
+    const engine = this.#engine(table);
+    // 已交卷的人仍可對上一輪提同義；待交卷集合不因此改變。
+    return engine.pendingSeatIds(table.game).includes(seat.id)
+      || engine.legalActions(table.game, seat.id, table.options).some((legal) => legal.action === action);
   }
 
   #engine(table: Table): GameEngine<unknown, unknown> {
@@ -886,10 +982,13 @@ export class MultiplayerTableStore {
         const champion = [...seated].sort((left, right) => right.gameScore - left.gameScore)[0] ?? null;
         this.#appendEvent(table, "game_over", champion, champion ? `整場結束，${champion.name} 以 ${champion.gameScore} 分獲勝。` : "整場結束。");
       }
+      this.#syncTurnTimer(table);
       return;
     }
     // 沒有結果卻沒人可以行動：本局無結果地結束（例如玩家不足）。
-    if (table.phase === "in_round" && engine.pendingSeatIds(transition.state).length === 0) table.phase = "ended";
+    const mayWaitForAudience = engine.audienceAction !== undefined;
+    if (table.phase === "in_round" && !mayWaitForAudience && engine.pendingSeatIds(transition.state).length === 0) table.phase = "ended";
+    this.#syncTurnTimer(table);
   }
 
   #appendEngineEvent(table: Table, event: EngineEvent): void {
@@ -950,6 +1049,7 @@ export class MultiplayerTableStore {
       } else this.#applyTransition(table, transition);
     }
     table.version += 1;
+    this.#syncTurnTimer(table);
     this.#flushWaiters(table);
   }
 
@@ -1020,7 +1120,7 @@ export class MultiplayerTableStore {
         : null,
       bid_hint: bidHint,
       substitute_invite: inviter ? { from_seat_id: inviter.id, from_name: inviter.name } : null,
-      hand, board,
+      hand, board, turn_deadline_at: table.turnDeadlineAt,
       pile: {
         cards: [...(rawPile.cards ?? [])], hand_type: rawPile.hand_type ?? null,
         played_by_seat_id: pileSeat?.id ?? null, played_by_name: pileSeat?.name ?? null,
@@ -1167,6 +1267,7 @@ export class MultiplayerTableStore {
       tables: [...this.#tables.values()].map((table) => ({
         id: table.id, joinCode: table.joinCode, ownerSeatId: table.ownerSeatId, mode: table.mode, options: table.options, nextSeatIndex: table.nextSeatIndex, phase: table.phase, version: table.version,
         round: table.round, game: table.game === null ? null : this.#engine(table).serialize(table.game),
+        turnTimerKey: table.turnTimerKey, turnDeadlineAt: table.turnDeadlineAt,
         seats: table.seats.map((seat) => ({
           id: seat.id, kind: seat.kind, name: seat.name, seated: seat.seated, seatIndex: seat.seatIndex, biddingSystem: seat.biddingSystem,
           gameScore: seat.gameScore, roundsWon: seat.roundsWon, humanTokenHash: seat.humanTokenHash, principalId: seat.principalId, lastClientId: seat.lastClientId,
@@ -1208,6 +1309,9 @@ export class MultiplayerTableStore {
         id: saved.id, joinCode: saved.joinCode, ownerSeatId: saved.ownerSeatId, mode, options: engine.normalizeOptions(saved.options),
         nextSeatIndex: typeof saved.nextSeatIndex === "number" ? saved.nextSeatIndex : seats.length, phase,
         version: Number(saved.version), round: Number(saved.round), game,
+        turnTimerKey: typeof saved.turnTimerKey === "string" ? saved.turnTimerKey : null,
+        turnDeadlineAt: typeof saved.turnDeadlineAt === "string" ? saved.turnDeadlineAt : null,
+        turnTimer: null,
         seats, agentSessions: new Map((saved.agentSessions as AgentSession[]).map((session) => [session.tokenHash, { ...session }])),
         events: structuredClone((saved.events ?? []) as TableEvent[]), chat: structuredClone((saved.chat ?? []) as PublicChatMessage[]),
         nextEventId: Number(saved.nextEventId), receipts: new Map(structuredClone((saved.receipts ?? []) as [string, Receipt<unknown>][])),
@@ -1335,4 +1439,9 @@ function chineseCount(value: number): string {
 function normalizeName(value: string, fallback: string): string {
   const normalized = value.trim().slice(0, 80);
   return normalized || fallback;
+}
+
+/** 固定使用台北時區的 ISO 8601 時間。 */
+function taipeiIso(timestamp: number): string {
+  return new Date(timestamp + 8 * 60 * 60 * 1000).toISOString().replace("Z", "+08:00");
 }

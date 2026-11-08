@@ -85,6 +85,7 @@ export async function startAgentGameTableHost(options: AgentGameTableHostOptions
     url: `http://${hostname}:${address.port}`,
     // 瀏覽器與 fetch 的 keep-alive 連線會讓 server.close() 永遠等不到，所以一併關掉所有連線。
     close: () => new Promise<void>((resolve, reject) => {
+      store.close();
       server.close((error) => (error ? reject(error) : resolve()));
       server.closeAllConnections();
     }),
@@ -214,6 +215,18 @@ async function routeRequest(
       });
       return;
     }
+    if (method === "POST" && url.pathname === "/api/human/audience") {
+      sendJson(response, 200, {
+        table: store.humanAudienceAction(
+          token,
+          requireAction(body.action),
+          requirePositiveInteger(body.expected_version, "expected_version"),
+          requireIdempotencyKey(body.idempotency_key),
+          requireCardList(body.cards),
+        ),
+      });
+      return;
+    }
     if (method === "POST" && url.pathname === "/api/human/action") {
       sendJson(response, 200, {
         table: store.humanAction(
@@ -315,6 +328,18 @@ async function routeRequest(
     if (method === "POST" && url.pathname === "/api/agent/accept-substitute") {
       sendJson(response, 200, {
         table: store.agentAcceptSubstitute(token, requirePositiveInteger(body.expected_version, "expected_version"), requireIdempotencyKey(body.idempotency_key)),
+      });
+      return;
+    }
+    if (method === "POST" && url.pathname === "/api/agent/audience") {
+      sendJson(response, 200, {
+        table: store.agentAudienceAction(
+          token,
+          requireAction(body.action),
+          requirePositiveInteger(body.expected_version, "expected_version"),
+          requireIdempotencyKey(body.idempotency_key),
+          requireCardList(body.cards),
+        ),
       });
       return;
     }

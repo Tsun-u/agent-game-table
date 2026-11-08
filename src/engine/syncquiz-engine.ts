@@ -183,7 +183,9 @@ export const syncQuizEngine: GameEngine<SyncQuizState, SyncQuizOptions> = {
     const next = structuredClone(state);
     if (next.phase === "judging") {
       voteSame(next.claim!, id, action);
-      return resolveClaim(next);
+      const result = resolveClaim(next);
+      const event = { kind: "syncquiz:same_voted", seatId: id, text: "{name} 已投票" };
+      return { ...result, events: [event, ...result.events] };
     }
     if (next.phase !== "answering" && next.phase !== "reviewing") throw new Error("現在不能送出這個動作。");
     if (action.action === "claim_same") {
@@ -198,19 +200,27 @@ export const syncQuizEngine: GameEngine<SyncQuizState, SyncQuizOptions> = {
       next.resumePhase = next.phase;
       next.phase = "judging";
       next.timerStep++;
-      return transition(next);
+      return {
+        state: next,
+        events: [{ kind: "syncquiz:same_claimed", seatId: id, text: `{name} 認為『${answers[0]}』和『${answers[1]}』意思一樣，請投票` }],
+        result: null,
+      };
     }
     if (action.action === "finish_round" && next.phase === "reviewing") {
       if (next.finished.includes(id)) throw new Error("已經送過結束本局了。");
       next.finished.push(id);
-      return next.finished.length === next.order.length ? settle(next, options) : transition(next);
+      const result = next.finished.length === next.order.length ? settle(next, options) : transition(next);
+      const event = { kind: "syncquiz:round_finished", seatId: id, text: "{name} 按了結束本局" };
+      return { ...result, events: [event, ...result.events] };
     }
     if (action.action !== "submit_answer" || next.phase !== "answering") throw new Error("現在不能送出這個動作。");
     if (id in next.answers) throw new Error("這一輪已經交過了");
     const answer = action.cards[0] ?? "";
     if (!normalizedAnswer(answer) || [...answer].length > 20) throw new Error("答案要填 1～20 字。");
     next.answers[id] = answer;
-    return next.order.every((seat) => seat in next.answers) ? reveal(next, options) : transition(next);
+    const result = next.order.every((seat) => seat in next.answers) ? reveal(next, options) : transition(next);
+    const event = { kind: "syncquiz:answer_submitted", seatId: id, text: "{name} 已交答案" };
+    return { ...result, events: [event, ...result.events] };
   },
   audienceAction(state, member, action, options) {
     if (state.order.includes(member.id)) throw new Error("入座者不能出題。");
@@ -220,7 +230,9 @@ export const syncQuizEngine: GameEngine<SyncQuizState, SyncQuizOptions> = {
     if (state.queue.length >= 50) throw new Error("題目排太多了，等一下再出");
     const next = structuredClone(state);
     next.queue.push({ text, author: member.name });
-    return next.phase === "waiting_question" ? beginQuestion(next, options) : transition(next);
+    const result = next.phase === "waiting_question" ? beginQuestion(next, options) : transition(next);
+    const event = { kind: "syncquiz:question_submitted", seatId: member.id, text: `{name} 出了一題，佇列還有 ${next.queue.length} 題` };
+    return { ...result, events: [event, ...result.events] };
   },
   carryOver: (state) => structuredClone(state.queue),
   onSeatRemoved(state, id) {

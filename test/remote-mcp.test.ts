@@ -229,3 +229,27 @@ async function availablePort(): Promise<number> {
   await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   return address.port;
 }
+
+test("Remote MCP 觀眾動作透過登入身分將題目送到默契考驗", async (context) => {
+  const port = await availablePort();
+  const publicUrl = `http://127.0.0.1:${port}`;
+  const store = new MultiplayerTableStore(() => createDeck());
+  const owner = store.createTable("阿童", { audience_only: true, turn_seconds: 0 }, "syncquiz");
+  store.humanTakeSeat(owner.human_token, owner.table.version, "remote-quiz-owner-seat");
+  const player = store.joinHuman(owner.table.join_code, "小煜");
+  store.humanTakeSeat(player.human_token, player.table.version, "remote-quiz-player-seat");
+  const authenticator = new StaticTokenAuthenticator({ xiaokui: XIAOKUI_TOKEN });
+  const gateway = new RemoteMcpGateway({ store, authenticator, publicUrl, humanAccessKey: HUMAN_KEY });
+  const host = await startAgentGameTableHost({ hostname: "127.0.0.1", port, store, extension: gateway });
+  context.after(async () => {
+    await gateway.close();
+    await host.close();
+  });
+  const remote = await connectRemote(publicUrl, XIAOKUI_TOKEN, "remote-quiz-audience");
+  context.after(() => remote.client.close());
+  await remote.client.callTool({ name: "join_table", arguments: { join_code: owner.table.join_code, agent_name: "小葵" } });
+  const view = store.startRound(owner.human_token, store.getHumanView(owner.human_token).version, "remote-quiz-start");
+  const result = await remote.client.callTool({ name: "audience_action", arguments: { action: "submit_question", cards: ["野餐帶什麼？"], expected_version: view.version, idempotency_key: "remote-audience-question" } });
+  assert.equal(result.isError, undefined);
+  assert.deepEqual(tableFrom(result).board.question, { text: "野餐帶什麼？", author: "小葵" });
+});

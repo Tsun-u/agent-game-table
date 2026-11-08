@@ -94,7 +94,8 @@ test("默契考驗：入座者不得出題、題目與答案字數驗證、佇�
 test("默契考驗：交卷隱藏、重複交卷與錯誤階段", () => {
   const original = deal(), saved = structuredClone(original);
   const result = act(original, "a", "submit_answer", ["秘密答案"]), s = result.state;
-  assert.deepEqual(original, saved); assert.deepEqual(result.events, []);
+  assert.deepEqual(original, saved);
+  assert.deepEqual(result.events, [{ kind: "syncquiz:answer_submitted", seatId: "a", text: "{name} 已交答案" }]);
   assert.throws(() => act(s, "a", "submit_answer", ["改卷"]), /這一輪已經交過了/);
   assert.deepEqual(engine.pendingSeatIds(s), ["b"]);
   assert.equal(engine.view(s, "a", options).your_answer, "秘密答案");
@@ -123,7 +124,10 @@ test("默契考驗：指定不同組答案、同義合併可接續併組並重�
   s = answers(s, ["甲", "乙", "丙", "丁"]).state;
   const result = finish(s);
   assert.deepEqual(result.result!.scoreDelta, { a: 1, b: 1, c: 1, d: 0 });
-  assert.ok(result.events.every((event) => event.text.includes("同組")));
+  const scoreEvents = result.events.filter((event) => event.kind === "syncquiz:score");
+  assert.equal(scoreEvents.length, 4);
+  assert.ok(scoreEvents.every((event) => event.text.includes("同組")));
+  assert.deepEqual(result.events[0], { kind: "syncquiz:round_finished", seatId: "d", text: "{name} 按了結束本局" });
 });
 test("默契考驗：否決同一對不能再提，其他答案對仍可提出", () => {
   let s = answers(deal(options, ["a", "b", "c"]), ["玉兔", "月兔", "兔兔"]).state;
@@ -211,4 +215,43 @@ test("默契考驗：序列化續玩與代打保留答案、分組、票與待�
   assert.notEqual(removed, "abort");
   if (removed === "abort") throw new Error("已結束的局不應流局。");
   assert.equal(engine.audienceAction!(removed.state, { id: "b", name: "起身的玩家" }, { action: "submit_question", cards: ["局間題目"] }, options).state.queue[0]!.author, "起身的玩家");
+});
+
+test("默契考驗：交卷與投票事件不含答案，出題事件不含排隊題目", () => {
+  const ids = ["a", "b", "c", "d"];
+  const revealedAnswers = ["玉兔", "月兔", "白兔", "兔兔"];
+  let s = deal(options, ids);
+  const queuedQuestion = "還不能讓作答者先看到的題目";
+  const queued = question(s, queuedQuestion);
+  assert.deepEqual(queued.events, [{ kind: "syncquiz:question_submitted", seatId: member.id, text: "{name} 出了一題，佇列還有 1 題" }]);
+  assert.ok(!JSON.stringify(queued.events).includes(queuedQuestion));
+  s = queued.state;
+  for (const [index, id] of ids.entries()) {
+    const result = act(s, id, "submit_answer", [revealedAnswers[index]!]);
+    const event = result.events[0]!;
+    assert.deepEqual(event, { kind: "syncquiz:answer_submitted", seatId: id, text: "{name} 已交答案" });
+    for (const answer of revealedAnswers) assert.ok(!event.text.includes(answer));
+    if (index < 3) assert.equal(result.events.length, 1);
+    else assert.ok(result.events.some((item) => item.kind === "syncquiz:revealed" && item.text.includes("玉兔")));
+    s = result.state;
+  }
+  const currentAnswer = "這一題的秘密答案";
+  s = act(s, "a", "submit_answer", [currentAnswer]).state;
+  const claim = act(s, "a", "claim_same", ["玉兔", "月兔"]);
+  assert.deepEqual(claim.events, [{ kind: "syncquiz:same_claimed", seatId: "a", text: "{name} 認為『玉兔』和『月兔』意思一樣，請投票" }]);
+  assert.ok(!JSON.stringify(claim.events).includes(currentAnswer));
+  s = claim.state;
+  for (const [id, action] of [["b", "agree_same"], ["c", "reject_same"]] as const) {
+    const result = act(s, id, action);
+    assert.deepEqual(result.events[0], { kind: "syncquiz:same_voted", seatId: id, text: "{name} 已投票" });
+    for (const event of result.events) {
+      for (const answer of [...revealedAnswers, currentAnswer]) assert.ok(!event.text.includes(answer));
+    }
+    s = result.state;
+  }
+  assert.equal(s.answers.a, currentAnswer);
+  const waitingOptions = { ...options, audience_only: true };
+  const started = question(deal(waitingOptions), "開始作答才公開的題目", waitingOptions);
+  assert.deepEqual(started.events[0], { kind: "syncquiz:question_submitted", seatId: member.id, text: "{name} 出了一題，佇列還有 0 題" });
+  assert.equal(started.events[1]!.kind, "syncquiz:question_started");
 });

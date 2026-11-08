@@ -106,7 +106,9 @@ export const saySameThingEngine: GameEngine<SaySameThingState, SaySameThingOptio
     const next = structuredClone(state);
     if (next.phase === "judging") {
       voteSame(next.claim!, id, action);
-      return resolveClaim(next);
+      const result = resolveClaim(next);
+      const event = { kind: "saysamething:same_voted", seatId: id, text: "{name} 已投票" };
+      return { ...result, events: [event, ...result.events] };
     }
     if (next.phase !== "writing") throw new Error("現在不能送出這個動作。");
     if (action.action === "claim_same") {
@@ -115,14 +117,20 @@ export const saySameThingEngine: GameEngine<SaySameThingState, SaySameThingOptio
       next.claim = startClaim(id);
       next.phase = "judging";
       next.timerStep++;
-      return transition(next);
+      return {
+        state: next,
+        events: [{ kind: "saysamething:same_claimed", seatId: id, text: "{name} 認為上一輪的詞意思都一樣，請投票" }],
+        result: null,
+      };
     }
     if (action.action !== "submit_word") throw new Error("現在只能交詞或提同義認定。");
     if (id in next.words) throw new Error("這一輪已經交過了");
     const word = action.cards[0] ?? "";
     if (!normalizedAnswer(word) || [...word].length > 20) throw new Error("詞要填 1～20 字。");
     next.words[id] = word;
-    return next.order.every((seat) => seat in next.words) ? reveal(next, options) : transition(next);
+    const result = next.order.every((seat) => seat in next.words) ? reveal(next, options) : transition(next);
+    const event = { kind: "saysamething:word_submitted", seatId: id, text: "{name} 已交詞" };
+    return { ...result, events: [event, ...result.events] };
   },
   onSeatRemoved(state, id) {
     if (state.phase !== "ended" && state.order.includes(id)) return "abort";

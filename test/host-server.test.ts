@@ -136,3 +136,22 @@ test("repeated wrong invitation codes from one address are throttled", async (co
   const neighbour = await guess(created.table.join_code, "203.0.113.10");
   assert.equal(neighbour.status, 200, "another address is unaffected");
 });
+
+test("HTTP 人類觀眾端點：出題與冪等回放共用牌桌狀態", async (context) => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  const host = await startAgentGameTableHost({ port: 0, store });
+  context.after(() => host.close());
+  const owner = store.createTable("阿童", { audience_only: true, turn_seconds: 0 }, "syncquiz");
+  store.humanTakeSeat(owner.human_token, owner.table.version, "http-quiz-owner-seat");
+  const agentClient = new AgentGameTableHostClient(host.url);
+  const agent = await agentClient.joinAgent(owner.table.join_code, "小葵");
+  await agentClient.takeSeat(agent.agent_token, agent.table.version, "http-quiz-agent-seat");
+  const spectator = store.joinHuman(owner.table.join_code, "小蝶");
+  const view = store.startRound(owner.human_token, store.getHumanView(owner.human_token).version, "http-quiz-start");
+  const options = { method: "POST" as const, token: spectator.human_token, body: { action: "submit_question", cards: ["  下雨想做什麼？  "], expected_version: view.version, idempotency_key: "http-audience-question" } };
+  const first = await request<{ table: PublicTableView }>(host.url, "/api/human/audience", options);
+  assert.deepEqual(first.table.board.question, { text: "下雨想做什麼？", author: "小蝶" });
+  assert.equal(first.table.turn_deadline_at, null);
+  assert.deepEqual(await request(host.url, "/api/human/audience", options), first);
+  assert.deepEqual((await agentClient.getAgentView(agent.agent_token)).board.question, first.table.board.question);
+});

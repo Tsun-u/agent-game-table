@@ -52,7 +52,8 @@ test("聯想收束：隱藏內容、不可改卷、空白與 code point 長度",
   assert.throws(() => act(initial, "a", "finish_round"));
   for (const word of ["", "   ", "字".repeat(21), "😀".repeat(21)]) assert.throws(() => act(initial, "a", "submit_word", [word]));
   const result = act(initial, "a", "submit_word", ["😀".repeat(20)]), s = result.state;
-  assert.deepEqual(initial, before); assert.deepEqual(result.events, []);
+  assert.deepEqual(initial, before);
+  assert.deepEqual(result.events, [{ kind: "saysamething:word_submitted", seatId: "a", text: "{name} 已交詞" }]);
   assert.deepEqual(engine.pendingSeatIds(s), ["b"]);
   assert.throws(() => act(s, "a", "submit_word", ["改卷"]), /這一輪已經交過了/);
   assert.equal(engine.view(s, "a", options).your_word, "😀".repeat(20));
@@ -123,4 +124,33 @@ test("聯想收束：逾時揭曉缺交、不開同義、投票逾時反對及�
   const ended = words(s, ["同", "同"], o).state;
   assert.equal(engine.turnTimer!(ended, o), null);
   assert.equal(engine.onTimeout!(ended, o).result, null);
+});
+
+test("聯想收束：交詞與投票事件不含任何人的詞，揭曉事件仍保留", () => {
+  const ids = ["a", "b", "c", "d"];
+  const revealedWords = ["玉兔", "月兔", "白兔", "兔兔"];
+  let s = deal(ids);
+  for (const [index, id] of ids.entries()) {
+    const result = act(s, id, "submit_word", [revealedWords[index]!]);
+    const event = result.events[0]!;
+    assert.deepEqual(event, { kind: "saysamething:word_submitted", seatId: id, text: "{name} 已交詞" });
+    for (const word of revealedWords) assert.ok(!event.text.includes(word));
+    if (index < 3) assert.equal(result.events.length, 1);
+    else assert.ok(result.events.some((item) => item.kind === "saysamething:revealed" && item.text.includes("玉兔")));
+    s = result.state;
+  }
+  const currentWord = "這一輪的秘密詞";
+  s = act(s, "a", "submit_word", [currentWord]).state;
+  const claim = act(s, "a", "claim_same");
+  assert.deepEqual(claim.events, [{ kind: "saysamething:same_claimed", seatId: "a", text: "{name} 認為上一輪的詞意思都一樣，請投票" }]);
+  s = claim.state;
+  for (const [id, action] of [["b", "agree_same"], ["c", "reject_same"]] as const) {
+    const result = act(s, id, action);
+    assert.deepEqual(result.events[0], { kind: "saysamething:same_voted", seatId: id, text: "{name} 已投票" });
+    for (const event of result.events) {
+      for (const word of [...revealedWords, currentWord]) assert.ok(!event.text.includes(word));
+    }
+    s = result.state;
+  }
+  assert.equal(s.phase, "writing");
 });

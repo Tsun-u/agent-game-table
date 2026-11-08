@@ -277,6 +277,10 @@ class PrincipalStoreHost implements AgentGameTableAgentHost {
     return this.#store.agentAction(agentToken, action, expectedVersion, idempotencyKey, cards);
   }
 
+  async agentAudienceAction(agentToken: string, action: TurnAction, expectedVersion: number, idempotencyKey: string, cards: readonly string[] = []): Promise<PublicTableView> {
+    return this.#store.agentAudienceAction(agentToken, action, expectedVersion, idempotencyKey, cards);
+  }
+
   async agentSay(agentToken: string, message: string, idempotencyKey: string): Promise<PublicTableView> {
     return this.#store.agentSay(agentToken, message, idempotencyKey);
   }
