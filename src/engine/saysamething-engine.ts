@@ -14,6 +14,9 @@ export interface SaySameThingState {
   claim: SameClaim | null;
   result: { matched: string; turn: number; points: number } | null;
 }
+function syncKey(state: SaySameThingState): string | null {
+  return state.phase === "ended" ? null : `${state.phase}:${state.turn}:${state.timerStep}`;
+}
 const optionDescriptions: readonly OptionDescription[] = [
   { key: "max_turns", type: "number", label: "最多輪數", description: "5～300 輪。", default: 30, min: 5, max: 300 },
   { key: "turn_seconds", type: "number", label: "回合秒數", description: "0 不計時，或 30～600 秒。計時對 AI 玩家不友善，建議有 AI 玩家時不開。", default: 0, min: 0, max: 600 },
@@ -33,7 +36,7 @@ function settle(state: SaySameThingState, matched: string | null, turn: number):
   state.result = matched === null ? null : { matched, turn, points };
   const text = matched === null ? `第 ${turn} 輪仍未撞詞，本局流局，每人 0 分。` : `第 ${turn} 輪撞到『${matched}』！每人 +${points} 分`;
   return {
-    state, events: [{ kind: "saysamething:round_ended", seatId: null, text }], result: {
+    state, events: [], result: {
       winnerSeatId: null, scoreDelta: Object.fromEntries(state.order.map((id) => [id, points])), gameOver: false, text,
     }
   };
@@ -156,8 +159,9 @@ export const saySameThingEngine: GameEngine<SaySameThingState, SaySameThingOptio
     });
   },
   hand: () => [], serialize: (state) => state, restore: (saved) => structuredClone(saved) as SaySameThingState,
+  syncKey,
   turnTimer(state, options) {
-    return !options.turn_seconds || state.phase === "ended" ? null : { key: `${state.phase}:${state.turn}:${state.timerStep}`, seconds: options.turn_seconds };
+    return !options.turn_seconds || state.phase === "ended" ? null : { key: syncKey(state)!, seconds: options.turn_seconds };
   },
   onTimeout(state, options) {
     const next = structuredClone(state);

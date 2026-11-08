@@ -252,6 +252,8 @@ interface Table {
   nextSeatIndex: number;
   phase: TablePhase;
   version: number;
+  syncKey: string | null;
+  syncVersion: number;
   round: number;
   /** 引擎的一局狀態；lobby 或還沒開過局時是 null。 */
   game: unknown | null;
@@ -327,7 +329,7 @@ export class MultiplayerTableStore {
       gameScore: 0, roundsWon: 0, biddingSystem: null, humanTokenHash, principalId: null, lastClientId: null,
     };
     const table: Table = {
-      id, joinCode, ownerSeatId: humanSeat.id, mode: engine.mode, options: engine.normalizeOptions(options), nextSeatIndex: 0, phase: "lobby", version: 1, round: 0,
+      id, joinCode, ownerSeatId: humanSeat.id, mode: engine.mode, options: engine.normalizeOptions(options), nextSeatIndex: 0, phase: "lobby", version: 1, syncKey: null, syncVersion: 1, round: 0,
       game: null, turnTimerKey: null, turnDeadlineAt: null, turnTimer: null, seats: [humanSeat], agentSessions: new Map(), events: [], chat: [],
       nextEventId: 1, receipts: new Map(), waiters: new Map(), reconnectTickets: new Map(), substituteInvites: new Map(),
     };
@@ -351,7 +353,7 @@ export class MultiplayerTableStore {
     };
     table.seats.push(seat);
     this.#humanTokens.set(tokenHash, { tableId: table.id, seatId: seat.id });
-    table.version += 1;
+    this.#bumpVersion(table);
     this.#appendEvent(table, "seat_joined", seat, `${seat.name} 加入了牌桌，先在觀戰區。`);
     this.#flushWaiters(table);
     this.#persist();
@@ -447,7 +449,7 @@ export class MultiplayerTableStore {
     table.agentSessions.set(tokenHash, session);
     this.#agentTokens.set(tokenHash, table.id);
     if (principalId) this.#principalSeats.set(principalBindingKey(principalId, seat.name), { tableId: table.id, seatId: seat.id });
-    table.version += 1;
+    this.#bumpVersion(table);
     this.#appendEvent(table, "seat_joined", seat, `${seat.name} 加入了牌桌，先在觀戰區。`);
     session.cursor = table.nextEventId - 1;
     this.#flushWaiters(table);
@@ -650,7 +652,7 @@ export class MultiplayerTableStore {
     if (target.seated) throw new Error(`${target.name} 已經在座位上，只能邀請觀戰區的人。`);
     for (const [inviteeId, invite] of table.substituteInvites) if (invite.fromSeatId === seat.id) table.substituteInvites.delete(inviteeId);
     table.substituteInvites.set(target.id, { fromSeatId: seat.id, expiresAtMs: Date.now() + SUBSTITUTE_INVITE_TTL_MS });
-    table.version += 1;
+    this.#bumpVersion(table);
     this.#appendEvent(table, "substitute_invited", seat, `${seat.name} 邀請 ${target.name} 代打。`);
     const result = this.#remember(table, seat.id, idempotencyKey, operation, this.#view(table, seat.id));
     this.#flushWaiters(table);
@@ -676,7 +678,7 @@ export class MultiplayerTableStore {
     from.seatIndex = null;
     table.substituteInvites.delete(seat.id);
     for (const [inviteeId, pending] of table.substituteInvites) if (pending.fromSeatId === from.id) table.substituteInvites.delete(inviteeId);
-    table.version += 1;
+    this.#bumpVersion(table);
     this.#syncTurnTimer(table);
     this.#appendEvent(table, "substitute_accepted", seat, `${seat.name} 接手 ${from.name} 的座位。`);
     const result = this.#remember(table, seat.id, idempotencyKey, operation, this.#view(table, seat.id));
@@ -705,7 +707,7 @@ export class MultiplayerTableStore {
     if (replay) return replay;
     seat.biddingSystem = biddingSystem;
     if (seat.principalId) this.#principalSystems.set(seat.principalId, biddingSystem);
-    table.version += 1;
+    this.#bumpVersion(table);
     this.#appendEvent(table, "bidding_system", seat, `${seat.name} 宣告制度：${biddingSystemLabel(biddingSystem)}。`);
     const result = this.#remember(table, seat.id, idempotencyKey, operation, this.#view(table, seat.id));
     this.#flushWaiters(table);
@@ -741,7 +743,7 @@ export class MultiplayerTableStore {
       if (seat.principalId) this.#principalSystems.set(seat.principalId, seat.biddingSystem);
     }
     seat.seated = true;
-    table.version += 1;
+    this.#bumpVersion(table);
     const systemText = seat.biddingSystem ? `，打 ${biddingSystemLabel(seat.biddingSystem)}` : "";
     this.#appendEvent(table, "seat_taken", seat, chairName ? `${seat.name} 坐${chairName}${systemText}。` : `${seat.name} 入座。`);
     const result = this.#remember(table, seat.id, idempotencyKey, operation, this.#view(table, seat.id));
@@ -764,7 +766,7 @@ export class MultiplayerTableStore {
       table.game = pruned === "abort" ? null : pruned.state;
     }
     for (const [inviteeId, invite] of table.substituteInvites) if (invite.fromSeatId === seat.id) table.substituteInvites.delete(inviteeId);
-    table.version += 1;
+    this.#bumpVersion(table);
     this.#syncTurnTimer(table);
     this.#appendEvent(table, "seat_vacated", seat, `${seat.name} 起身到觀戰區。`);
     const result = this.#remember(table, seat.id, idempotencyKey, operation, this.#view(table, seat.id));
@@ -793,7 +795,7 @@ export class MultiplayerTableStore {
     table.round = round;
     table.game = dealt.state;
     table.phase = "in_round";
-    table.version += 1;
+    this.#bumpVersion(table);
     this.#appendEvent(table, "round_started", null, `第 ${table.round} 局開始。`);
     this.#applyTransition(table, dealt);
     const result = this.#remember(table, humanSeat.id, idempotencyKey, operation, this.#view(table, humanSeat.id));
@@ -877,7 +879,7 @@ export class MultiplayerTableStore {
       if (this.#tables.get(table.id) !== table || table.turnTimerKey !== requested.key || table.turnDeadlineAt !== deadline) return;
       this.#clearTurnTimer(table);
       this.#applyTransition(table, engine.onTimeout!(table.game, table.options));
-      table.version += 1;
+      this.#bumpVersion(table);
       this.#flushWaiters(table);
       this.#persist();
     };
@@ -929,7 +931,7 @@ export class MultiplayerTableStore {
     const operation = `${channel}:${action}:${[...normalizedCards].sort().join(",")}`;
     const replay = this.#replay<PublicTableView>(table, seat.id, idempotencyKey, operation);
     if (replay) return replay;
-    this.#assertVersion(table, expectedVersion);
+    this.#assertActionVersion(table, expectedVersion);
     const engine = this.#engine(table);
     let transition: EngineTransition<unknown>;
     if (audience) {
@@ -941,7 +943,7 @@ export class MultiplayerTableStore {
       transition = engine.apply(table.game, seat.id, { action, cards: normalizedCards }, table.options);
     }
     this.#applyTransition(table, transition);
-    table.version += 1;
+    this.#bumpVersion(table);
     const result = this.#remember(table, seat.id, idempotencyKey, operation, this.#view(table, seat.id));
     this.#flushWaiters(table);
     this.#persist();
@@ -1048,7 +1050,7 @@ export class MultiplayerTableStore {
         this.#appendEvent(table, "round_ended", null, `${seat.name} 離桌，本局流局不計分。`);
       } else this.#applyTransition(table, transition);
     }
-    table.version += 1;
+    this.#bumpVersion(table);
     this.#syncTurnTimer(table);
     this.#flushWaiters(table);
   }
@@ -1233,6 +1235,20 @@ export class MultiplayerTableStore {
     return name;
   }
 
+  #bumpVersion(table: Table): void {
+    table.version += 1;
+    const key = table.phase === "in_round" && table.game !== null
+      ? this.#engine(table).syncKey?.(table.game) ?? null : null;
+    if (key === null || key !== table.syncKey) table.syncVersion = table.version;
+    table.syncKey = key;
+  }
+
+  #assertActionVersion(table: Table, expectedVersion: number): void {
+    if (expectedVersion === table.version
+      || table.syncVersion <= expectedVersion && expectedVersion < table.version) return;
+    this.#assertVersion(table, expectedVersion);
+  }
+
   #assertVersion(table: Table, expectedVersion: number): void {
     if (table.version !== expectedVersion) throw new Error(`牌桌版本衝突：目前是 ${table.version}，不是 ${expectedVersion}。請重新讀取牌桌。`);
   }
@@ -1308,7 +1324,7 @@ export class MultiplayerTableStore {
       const table: Table = {
         id: saved.id, joinCode: saved.joinCode, ownerSeatId: saved.ownerSeatId, mode, options: engine.normalizeOptions(saved.options),
         nextSeatIndex: typeof saved.nextSeatIndex === "number" ? saved.nextSeatIndex : seats.length, phase,
-        version: Number(saved.version), round: Number(saved.round), game,
+        version: Number(saved.version), syncKey: null, syncVersion: Number(saved.version), round: Number(saved.round), game,
         turnTimerKey: typeof saved.turnTimerKey === "string" ? saved.turnTimerKey : null,
         turnDeadlineAt: typeof saved.turnDeadlineAt === "string" ? saved.turnDeadlineAt : null,
         turnTimer: null,

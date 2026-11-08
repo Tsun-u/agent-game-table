@@ -154,3 +154,18 @@ test("聯想收束：交詞與投票事件不含任何人的詞，揭曉事件�
   }
   assert.equal(s.phase, "writing");
 });
+
+test("聯想收束：撞詞與流局結算都不重複送 round_ended 事件", () => {
+  const matched = words(deal(), ["玉兔", "玉兔"]);
+  let state = deal();
+  for (let turn = 1; turn < options.max_turns; turn++) state = words(state, ["甲", "乙"]).state;
+  const drawn = words(state, ["甲", "乙"]);
+  const claimed = act(act(words(deal(), ["玉兔", "月兔"]).state, "a", "claim_same").state, "b", "agree_same");
+  for (const result of [matched, drawn, claimed]) {
+    assert.equal(result.state.phase, "ended");
+    assert.ok(result.result);
+    assert.ok(!result.events.some((event) => event.kind === "saysamething:round_ended"));
+  }
+  assert.match(matched.result!.text, /撞到/);
+  assert.match(drawn.result!.text, /流局/);
+});

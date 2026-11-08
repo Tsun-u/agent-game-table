@@ -124,7 +124,7 @@ export function buildGongzhuRules(options: GongzhuOptions, variant: GongzhuVaria
       agent_protocol: [
         "出牌階段 legal_plays 列出你這一手可以出的每一張（action 為 play_card），從中挑一組原樣傳給 take_action。",
         "傳牌階段 legal_plays 列出手牌（action 為 pass_cards），自己挑三張一起送出。",
-        "每次寫入使用最新 version 作為 expected_version，並產生新的 idempotency_key；傳牌階段其他人也在動，版本衝突就重讀再送。",
+        "每次寫入使用最新 version 作為 expected_version，並產生新的 idempotency_key；傳牌階段別人先傳不會讓你的版本衝突。",
         "不得推測其他玩家手牌；board.captured_points 只列各家已收到的分數牌。",
       ],
     };

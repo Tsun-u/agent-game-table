@@ -460,10 +460,10 @@ test("觀眾動作：人類與 Agent 的冪等、版本及入座者交由引擎�
     assert.equal(first.version, version + 1);
     assert.equal(first.board.queue_length, 1);
     assert.deepEqual(store.humanAudienceAction(spectator.human_token, "submit_question", version, "human-question-01", ["野餐帶什麼？"]), first);
-    assert.throws(() => store.humanAudienceAction(spectator.human_token, "submit_question", version, "human-question-02", ["早餐？"]), /版本衝突/);
+    assert.equal(store.humanAudienceAction(spectator.human_token, "submit_question", version, "human-question-02", ["早餐？"]).board.queue_length, 2);
     assert.throws(() => store.humanAudienceAction(spectator.human_token, "submit_question", first.version, "human-question-01", ["不同題目"]), /不同操作/);
     const second = store.agentAudienceAction(watcher.agent_token, "submit_question", first.version, "agent-question-01", ["早餐吃什麼？"]);
-    assert.equal(second.board.queue_length, 2);
+    assert.equal(second.board.queue_length, 3);
     assert.deepEqual(store.agentAudienceAction(watcher.agent_token, "submit_question", first.version, "agent-question-01", ["早餐吃什麼？"]), second);
     assert.throws(() => store.agentAction(watcher.agent_token, "submit_question", second.version, "agent-question-01", ["早餐吃什麼？"]), /不同操作/);
     assert.throws(() => store.humanAudienceAction(owner.human_token, "submit_question", second.version, "seated-question-01", ["題目"]), /入座者不能出題/);
@@ -645,4 +645,103 @@ test("聯想收束：交卷後仍可提上一輪同義，投票可喚醒已等�
   assert.equal(notice.table.board.phase, "judging");
   next = store.agentAction(agent.agent_token, "agree_same", next.version, "claim-agent-agree");
   assert.equal(next.phase, "ended");
+});
+
+test("同時行動：兩人用同一版本交詞成功並揭曉", (context) => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  context.after(() => store.close());
+  const { owner, agent, view } = wordTable(store, "saysamething", { turn_seconds: 0 });
+  const first = store.humanAction(owner.human_token, "submit_word", view.version, "sync-word-a", ["玉兔"]);
+  assert.equal(first.board.turn, 1);
+  const revealed = store.agentAction(agent.agent_token, "submit_word", view.version, "sync-word-b", ["月兔"]);
+  assert.equal(revealed.version, view.version + 2);
+  assert.equal(revealed.board.turn, 2);
+  assert.equal((revealed.board.chain as unknown[]).length, 1);
+});
+
+test("同時行動：揭曉後拒絕上一輪版本的交詞", (context) => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  context.after(() => store.close());
+  const { owner, agent, view } = wordTable(store, "saysamething", { turn_seconds: 0 });
+  const beforeReveal = store.humanAction(owner.human_token, "submit_word", view.version, "stale-word-a", ["玉兔"]);
+  store.agentAction(agent.agent_token, "submit_word", beforeReveal.version, "stale-word-b", ["月兔"]);
+  assert.throws(() => store.humanAction(owner.human_token, "submit_word", beforeReveal.version, "stale-next-word", ["兔子"]), /版本衝突/);
+});
+
+test("同時行動：計時揭曉後拒絕到期前版本的交詞", (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const store = new MultiplayerTableStore(() => createDeck());
+  context.after(() => store.close());
+  const { owner, agent, view } = wordTable(store);
+  const beforeTimeout = store.agentAction(agent.agent_token, "submit_word", view.version, "timeout-word", ["月兔"]);
+  context.mock.timers.tick(30_000);
+  assert.equal(store.getHumanView(owner.human_token).board.turn, 2);
+  assert.throws(() => store.humanAction(owner.human_token, "submit_word", beforeTimeout.version, "timeout-stale-word", ["玉兔"]), /版本衝突/);
+});
+
+test("同時行動：三人提同義後另外兩人以同一版本投票成功", (context) => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  context.after(() => store.close());
+  const owner = store.createTable("阿童", { turn_seconds: 0 }, "saysamething");
+  seatHuman(store, owner.human_token);
+  const agents = ["小葵", "阿宇"].map((name) => store.joinAgent(owner.table.join_code, name));
+  for (const agent of agents) seatAgent(store, agent.agent_token);
+  let view = store.startRound(owner.human_token, tableVersion(store, owner.human_token), "vote-start");
+  view = store.humanAction(owner.human_token, "submit_word", view.version, "vote-word-owner", ["玉兔"]);
+  for (const [i, agent] of agents.entries()) view = store.agentAction(agent.agent_token, "submit_word", view.version, `vote-word-${i}`, [i ? "白兔" : "月兔"]);
+  const beforeClaim = view.version;
+  view = store.humanAction(owner.human_token, "claim_same", view.version, "vote-claim");
+  assert.throws(() => store.agentAction(agents[0]!.agent_token, "agree_same", beforeClaim, "vote-before-claim"), /版本衝突/);
+  const version = view.version;
+  const first = store.agentAction(agents[0]!.agent_token, "agree_same", version, "vote-first");
+  assert.equal(first.board.phase, "judging");
+  const last = store.agentAction(agents[1]!.agent_token, "agree_same", version, "vote-last");
+  assert.equal(last.phase, "ended");
+});
+
+test("同時行動：傷心小棧四人以同一版本傳牌，出牌時拒絕傳牌版本", (context) => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  context.after(() => store.close());
+  const owner = store.createTable("阿童", {}, "hearts");
+  const tokens = [owner.human_token];
+  seatHuman(store, owner.human_token);
+  for (const name of ["小葵", "阿宇", "小煜"]) {
+    const player = store.joinHuman(owner.table.join_code, name);
+    tokens.push(player.human_token);
+    seatHuman(store, player.human_token);
+  }
+  const opened = store.startRound(owner.human_token, tableVersion(store, owner.human_token), "passing-start");
+  assert.equal(opened.board.phase, "passing");
+  for (const [i, token] of tokens.entries()) {
+    const view = store.getHumanView(token);
+    store.humanAction(token, "pass_cards", opened.version, `passing-${i}`, view.hand.slice(0, 3));
+  }
+  const current = store.getHumanView(owner.human_token);
+  assert.equal(current.version, opened.version + 4);
+  assert.equal(current.board.phase, "trick");
+  const active = tokens.find((token) => store.getHumanView(token).viewer_seat_id === current.active_seat_id)!;
+  const play = store.getHumanView(active).legal_plays[0]!;
+  assert.throws(() => store.humanAction(active, "play_card", opened.version, "passing-stale-play", [...play.cards]), /版本衝突/);
+});
+
+test("版本回歸：大老二輪流出牌維持嚴格檢查", (context) => {
+  const store = new MultiplayerTableStore(() => twoPlayerDeck());
+  context.after(() => store.close());
+  const owner = store.createTable("阿童");
+  seatHuman(store, owner.human_token);
+  const agent = store.joinAgent(owner.table.join_code, "小葵");
+  seatAgent(store, agent.agent_token);
+  const opened = store.startRound(owner.human_token, tableVersion(store, owner.human_token), "strict-start");
+  store.humanAction(owner.human_token, "play_cards", opened.version, "strict-play", ["♣3"]);
+  assert.throws(() => store.agentAction(agent.agent_token, "pass", opened.version, "strict-stale-pass"), /版本衝突/);
+});
+
+test("同時行動：默契考驗交答案後觀眾仍可以舊版本出題", (context) => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  context.after(() => store.close());
+  const { owner, spectator, view } = wordTable(store, "syncquiz", { turn_seconds: 0 });
+  store.humanAction(owner.human_token, "submit_answer", view.version, "audience-answer", ["飯"]);
+  const queued = store.humanAudienceAction(spectator.human_token, "submit_question", view.version, "audience-old-version", ["早餐吃什麼？"]);
+  assert.equal(queued.board.queue_length, 1);
+  assert.equal(queued.version, view.version + 2);
 });

@@ -22,6 +22,9 @@ export interface SyncQuizState {
   resumePhase: "answering" | "reviewing";
   timerStep: number;
 }
+function syncKey(state: SyncQuizState): string | null {
+  return state.phase === "ended" ? null : `${state.phase}:${state.questionIndex}:${state.timerStep}`;
+}
 const optionDescriptions: readonly OptionDescription[] = [
   { key: "questions_per_round", type: "number", label: "每局題數", description: "3～30 題。", default: 10, min: 3, max: 30 },
   { key: "audience_only", type: "boolean", label: "只用觀眾題目", description: "沒有題目時等觀眾出題。", default: false },
@@ -264,8 +267,9 @@ export const syncQuizEngine: GameEngine<SyncQuizState, SyncQuizOptions> = {
     });
   },
   hand: () => [], serialize: (state) => state, restore: (saved) => structuredClone(saved) as SyncQuizState,
+  syncKey,
   turnTimer(state, options) {
-    return !options.turn_seconds || state.phase === "ended" || state.phase === "waiting_question" ? null : { key: `${state.phase}:${state.questionIndex}:${state.timerStep}`, seconds: options.turn_seconds };
+    return !options.turn_seconds || state.phase === "ended" || state.phase === "waiting_question" ? null : { key: syncKey(state)!, seconds: options.turn_seconds };
   },
   onTimeout(state, options) {
     const next = structuredClone(state);

@@ -100,6 +100,8 @@ export function createGongzhuEngine(variant: GongzhuVariant): GameEngine<Gongzhu
       return { state: base, events: [{ kind: "passing_started", seatId: null, text: `第 ${input.round} 局先傳牌：每人選 3 張傳給${directionLabel(passDirection)}。` }], result: null };
     },
 
+    syncKey: (state) => state.phase === "passing" ? "passing" : null,
+
     pendingSeatIds(state: GongzhuState): readonly string[] {
       if (state.phase === "passing") return state.order.filter((seatId) => !(seatId in state.pendingPasses));
       return state.active ? [state.active] : [];

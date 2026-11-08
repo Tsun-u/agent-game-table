@@ -107,6 +107,8 @@ export interface GameEngine<State = unknown, Options = unknown> {
   audienceAction?(state: State, member: { id: string; name: string }, action: SeatAction, options: Options): EngineTransition<State>;
   /** 取出需要跨局保留的資料。 */
   carryOver?(state: State): unknown;
+  /** 同時行動階段的決策點識別；值不變時，其他人送出動作不影響你的決策，牌桌層據此放寬版本檢查。輪流行動的階段回傳 null 或不實作。 */
+  syncKey?(state: State): string | null;
   /** 回傳目前階段的計時識別與秒數，不計時則回傳 null。 */
   turnTimer?(state: State, options: Options): { key: string; seconds: number } | null;
   /** 計時到期時推進目前階段。 */
