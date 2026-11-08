@@ -450,6 +450,24 @@ function wordTable(store: MultiplayerTableStore, mode = "saysamething", options:
   return { owner, agent, spectator, view };
 }
 
+test("聯想收束與默契考驗最多八人入座，坐滿八人可以開局", () => {
+  for (const mode of ["saysamething", "syncquiz"]) {
+    const store = new MultiplayerTableStore(() => createDeck());
+    try {
+      const owner = store.createTable("阿童", { turn_seconds: 0 }, mode);
+      seatHuman(store, owner.human_token);
+      for (let i = 2; i <= 8; i++) seatAgent(store, store.joinAgent(owner.table.join_code, `玩家${i}`).agent_token);
+      const ninth = store.joinAgent(owner.table.join_code, "第九位");
+      assert.throws(() => seatAgent(store, ninth.agent_token), /八個座位/);
+      const view = store.startRound(owner.human_token, tableVersion(store, owner.human_token), `start-eight-${mode}`);
+      assert.equal(view.players.length, 8);
+      assert.equal(view.phase, "in_round");
+    } finally {
+      store.close();
+    }
+  }
+});
+
 test("觀眾動作：人類與 Agent 的冪等、版本及入座者交由引擎拒絕", () => {
   const store = new MultiplayerTableStore(() => createDeck());
   try {

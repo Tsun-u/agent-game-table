@@ -1,6 +1,6 @@
 # Agent Game Table MCP 共桌版
 
-Agent Game Table 讓人類與 MCP Agent 混坐同一桌打牌（大老二、拱豬、傷心小棧、撿紅點 2～4 席，排七 2～6 席），也支援聯想收束與默契考驗（兩款都是 2～4 席）。每位玩家都有自己的座位、手牌、回合與積分。MCP 可選完全本機的 STDIO，或自行架設的 Streamable HTTP Remote MCP。
+Agent Game Table 讓人類與 MCP Agent 混坐同一桌打牌（大老二、拱豬、傷心小棧、撿紅點 2～4 席，排七 2～6 席），也支援聯想收束與默契考驗（兩款都是 2～8 席）。每位玩家都有自己的座位、手牌、回合與積分。MCP 可選完全本機的 STDIO，或自行架設的 Streamable HTTP Remote MCP。
 
 本專案是獨立 repository；共桌 UI 位於 `web/`，由本機 Agent Game Table Host 提供。
 
@@ -214,7 +214,7 @@ MCP 公開版本化的 `bigtwo-tw-5` 規則表，內容與 Host 實際判定一�
 
 ## 目前範圍與信任邊界
 
-- 單一 Host 可同時管理多桌；每桌支援 2～4 位人類與 Agent 任意混搭；
+- 單一 Host 可同時管理多桌；每桌依遊戲支援 2～8 位人類與 Agent 任意混搭；
 - 沒有旁觀者模式；Remote 人類恢復仍綁定同一瀏覽器來源，沒有跨裝置帳號找回；
 - Remote 持久化目前是單一 Node process 的加密檔案，不支援多副本同時寫入；
 - OAuth 模式依賴外部 OIDC Authorization Server，本專案不自行簽發 OAuth token；
@@ -234,7 +234,7 @@ MCP 公開版本化的 `bigtwo-tw-5` 規則表，內容與 Host 實際判定一�
 
 ### 聯想收束與默契考驗
 
-兩款皆可 2～4 人入座，不發牌，`hand` 與 `legal_plays` 為空；使用 `take_action` 自由填答。交卷內容只在自己的 `board.your_word`／`board.your_answer` 出現，別人只看得到 `submitted` 裡的已交席位；全員交齊才一起公開。答案 1～20 字，以 code point 計算，比對去頭尾空白、英文轉小寫，交了不能改。
+兩款皆可 2～8 人入座，不發牌，`hand` 與 `legal_plays` 為空；使用 `take_action` 自由填答。交卷內容只在自己的 `board.your_word`／`board.your_answer` 出現，別人只看得到 `submitted` 裡的已交席位；全員交齊才一起公開。答案 1～20 字，以 code point 計算，比對去頭尾空白、英文轉小寫，交了不能改。
 
 - **聯想收束**（`saysamething`、`saysamething-1`）：`submit_word` 帶 `cards: ["詞"]`。沒撞到就從上一輪的詞繼續聯想；`board.turn` 是輪數、`chain` 是已揭曉詞鏈。上一輪可提一次 `claim_same`，`cards: []`，主張全部詞同義。全員撞詞得 `max(1, 11 − 輪數)` 分；`max_turns` 預設 30、範圍 5～300，最後一輪未撞到就流局。
 - **默契考驗**（`syncquiz`、`syncquiz-1`）：`submit_answer` 帶 `cards: ["答案"]`，同組至少兩人各 +1 分。`board.question_index`／`total_questions` 表示題數，`question` 帶題目及出題者，`history` 記錄揭曉答案與分組。下一題作答時可用 `claim_same`、`cards: ["答案A", "答案B"]` 提上一題兩個不同組答案的同義，每對只能提一次；通過就合併並重算該題分數。最後一題進 `reviewing`，可提最後一題同義，全員送 `finish_round`（`cards: []`）才結算。`questions_per_round` 預設 10、範圍 3～30。

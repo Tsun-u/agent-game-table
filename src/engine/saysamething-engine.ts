@@ -68,7 +68,7 @@ function resolveClaim(state: SaySameThingState): EngineTransition<SaySameThingSt
   return { state, events: [{ kind: "saysamething:claim_rejected", seatId: null, text: "同義認定未通過，這一輪重新交詞。" }], result: null };
 }
 export const saySameThingEngine: GameEngine<SaySameThingState, SaySameThingOptions> = {
-  mode: "saysamething", label: "聯想收束", rulesVersion: "saysamething-1", seats: { min: 2, max: 4, fixed: false }, optionDescriptions,
+  mode: "saysamething", label: "聯想收束", rulesVersion: "saysamething-1", seats: { min: 2, max: 8, fixed: false }, optionDescriptions,
   normalizeOptions(value) {
     const raw = (value ?? {}) as Record<string, unknown>;
     const max = Number(raw.max_turns);
@@ -81,7 +81,7 @@ export const saySameThingEngine: GameEngine<SaySameThingState, SaySameThingOptio
   buildRules(options): Rules {
     return {
       rules_version: this.rulesVersion, game: this.label, options, instructions: [
-        "2～4 人各自 submit_word，cards 第一格放 1～20 字的詞，交了不能改；全員交齊才揭曉。比對去頭尾空白、英文轉小寫。",
+        "2～8 人各自 submit_word，cards 第一格放 1～20 字的詞，交了不能改；全員交齊才揭曉。比對去頭尾空白、英文轉小寫。",
         "不同詞就從上一輪的詞繼續聯想；上一輪可 claim_same（不帶 cards）一次，提出者自動同意，其他人 agree_same／reject_same，全員同意才算撞詞。反對後清空這輪重交。",
         "第 N 輪撞詞每人 max(1, 11 − N) 分；最多輪數到仍不同就流局，不再開放同義認定。整場由人類決定何時結束。",
         "計時到期用已交的揭曉，沒交記為（沒交），不能撞詞或提同義；投票逾時算反對。",

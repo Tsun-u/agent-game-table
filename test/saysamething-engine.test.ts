@@ -16,7 +16,7 @@ function words(s: SaySameThingState, values: string[], o = options) {
 test("聯想收束：註冊、規則、選項和空手牌", () => {
   assert.equal(engineFor("saysamething"), engine);
   assert.equal(engine.rulesVersion, "saysamething-1");
-  assert.deepEqual(engine.seats, { min: 2, max: 4, fixed: false });
+  assert.deepEqual(engine.seats, { min: 2, max: 8, fixed: false });
   assert.deepEqual(options, { max_turns: 30, turn_seconds: 0 });
   const timerOption = engine.optionDescriptions.find((option) => option.key === "turn_seconds")!;
   assert.equal(timerOption.default, 0);

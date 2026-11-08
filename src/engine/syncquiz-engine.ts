@@ -121,7 +121,7 @@ function resolveClaim(state: SyncQuizState): EngineTransition<SyncQuizState> {
   return { state, events: [{ kind: "syncquiz:claim_resolved", seatId: null, text: outcome ? "同義認定通過，已合併同組並重算分數。" : "同義認定未通過。" }], result: null };
 }
 export const syncQuizEngine: GameEngine<SyncQuizState, SyncQuizOptions> = {
-  mode: "syncquiz", label: "默契考驗", rulesVersion: "syncquiz-1", seats: { min: 2, max: 4, fixed: false }, optionDescriptions,
+  mode: "syncquiz", label: "默契考驗", rulesVersion: "syncquiz-1", seats: { min: 2, max: 8, fixed: false }, optionDescriptions,
   normalizeOptions(value) {
     const raw = (value ?? {}) as Record<string, unknown>;
     const count = Number(raw.questions_per_round);
@@ -137,7 +137,7 @@ export const syncQuizEngine: GameEngine<SyncQuizState, SyncQuizOptions> = {
   buildRules(options): Rules {
     return {
       rules_version: this.rulesVersion, game: this.label, options, instructions: [
-        "2～4 人每題 submit_answer，cards 第一格填 1～20 字的自由答案，交了不能改，全員交齊才揭曉。比對去頭尾空白、英文轉小寫，同組至少兩人各得 1 分。",
+        "2～8 人每題 submit_answer，cards 第一格填 1～20 字的自由答案，交了不能改，全員交齊才揭曉。比對去頭尾空白、英文轉小寫，同組至少兩人各得 1 分。",
         "下一題作答時可 claim_same，cards 放上一題兩個不同組的答案，每對一次。提出者自動同意，其他人 agree_same／reject_same，全員同意才併組重算。投票暫停作答，原答案保留。",
         "最後一題進 reviewing，可提同義；全員 finish_round 才結算。本局結束後由人類決定是否再來一局。",
         "觀眾用 submit_question 出 1～60 字題目，佇列上限 50 題，入座者不能出題；題目優先使用，剩下題目跨局保留。內建題同局不重複，只用觀眾題目時空佇列會等觀眾出題。",

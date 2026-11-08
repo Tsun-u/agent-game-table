@@ -961,7 +961,7 @@ AI Agent：請使用 agent-game-table MCP，以你的名字 join_table 加入牌
         const line = wordElement("section", `word-chain-row${matched ? " matched" : ""}`);
         line.append(wordElement("strong", "word-round", `第 ${row.turn} 輪${matched ? " · 撞詞成功" : ""}`));
         const cells = wordElement("div", "word-cells");
-        cells.style.setProperty("--word-seats", String(Object.keys(row.words).length));
+        cells.style.setProperty("--word-seats", String(Math.min(Object.keys(row.words).length, 4)));
         for (const [id, word] of Object.entries(row.words)) {
           const cell = wordElement("div", "word-cell");
           cell.append(wordElement("small", "", nameOf(id)), wordElement("strong", "", word ?? "（沒交）"));

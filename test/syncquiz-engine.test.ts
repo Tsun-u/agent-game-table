@@ -22,7 +22,7 @@ function finish(s: SyncQuizState, o = options) {
 }
 test("默契考驗：註冊、選項、規則及原創題庫", () => {
   assert.equal(engineFor("syncquiz"), engine); assert.equal(engine.rulesVersion, "syncquiz-1");
-  assert.deepEqual(engine.seats, { min: 2, max: 4, fixed: false });
+  assert.deepEqual(engine.seats, { min: 2, max: 8, fixed: false });
   const defaults = { questions_per_round: 10, audience_only: false, turn_seconds: 30 };
   for (const raw of [null, false, [], "bad", { questions_per_round: 2, turn_seconds: 29 }, { questions_per_round: 31, turn_seconds: 601 }]) assert.deepEqual(engine.normalizeOptions(raw), defaults);
   assert.deepEqual(engine.normalizeOptions({ questions_per_round: "30", audience_only: true, turn_seconds: "600" }), { questions_per_round: 30, audience_only: true, turn_seconds: 600 });
