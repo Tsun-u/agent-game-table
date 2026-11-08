@@ -75,6 +75,8 @@ export interface GameBoardView {
 }
 
 export interface DealInput {
+  /** 上一局由引擎保留、帶入新局的資料。 */
+  readonly carry?: unknown;
   readonly deck: readonly Card[];
   readonly seatIds: readonly string[];
   readonly round: number;
@@ -101,6 +103,14 @@ export interface GameEngine<State = unknown, Options = unknown> {
   legalActions(state: State, seatId: string, options: Options): readonly LegalAction[];
   legalPlays(state: State, seatId: string, options: Options): readonly LegalPlay[];
   apply(state: State, seatId: string, action: SeatAction, options: Options): EngineTransition<State>;
+  /** 觀眾送出的動作，成員名字取送出當下的顯示名稱。 */
+  audienceAction?(state: State, member: { id: string; name: string }, action: SeatAction, options: Options): EngineTransition<State>;
+  /** 取出需要跨局保留的資料。 */
+  carryOver?(state: State): unknown;
+  /** 回傳目前階段的計時識別與秒數，不計時則回傳 null。 */
+  turnTimer?(state: State, options: Options): { key: string; seconds: number } | null;
+  /** 計時到期時推進目前階段。 */
+  onTimeout?(state: State, options: Options): EngineTransition<State>;
   /** 局中有人離桌：回傳接續後的狀態，或 "abort" 表示本局流局。 */
   onSeatRemoved(state: State, seatId: string, options: Options): EngineTransition<State> | "abort";
   /** 代打：把 fromSeatId 在局內的一切（手牌、輪到誰、已出的牌）改掛到 toSeatId 名下。 */

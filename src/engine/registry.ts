@@ -5,6 +5,8 @@ import { paiqiEngine } from "./paiqi-engine.js";
 import { honeymoonEngine } from "./honeymoon-engine.js";
 import { lightbridgeEngine } from "./lightbridge-engine.js";
 import { bridgeEngine } from "./bridge-engine.js";
+import { saySameThingEngine } from "./saysamething-engine.js";
+import { syncQuizEngine } from "./syncquiz-engine.js";
 import type { GameEngine } from "./types.js";
 
 const ENGINES: ReadonlyMap<string, GameEngine<unknown, unknown>> = new Map<string, GameEngine<unknown, unknown>>([
@@ -16,6 +18,8 @@ const ENGINES: ReadonlyMap<string, GameEngine<unknown, unknown>> = new Map<strin
   [honeymoonEngine.mode, honeymoonEngine as GameEngine<unknown, unknown>],
   [lightbridgeEngine.mode, lightbridgeEngine as GameEngine<unknown, unknown>],
   [bridgeEngine.mode, bridgeEngine as GameEngine<unknown, unknown>],
+  [saySameThingEngine.mode, saySameThingEngine as GameEngine<unknown, unknown>],
+  [syncQuizEngine.mode, syncQuizEngine as GameEngine<unknown, unknown>],
 ]);
 
 export const DEFAULT_GAME_MODE = bigTwoEngine.mode;
