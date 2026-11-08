@@ -454,6 +454,12 @@ test("MCP 聯想收束：文字摘要包含輪數、交卷、揭曉、投票與�
   assert.match(text, /待投票：小葵/);
   result = await client.callTool({ name: "wait_for_table_event", arguments: { timeout_seconds: 0 } });
   assert.equal((result.structuredContent as any).table.turn_deadline_at, view.turn_deadline_at);
+  result = await client.callTool({ name: "take_action", arguments: { action: "agree_same", expected_version: view.version, idempotency_key: "word-agent-agree-final" } });
+  text = JSON.stringify(result.content);
+  assert.equal(tableFrom(result).phase, "ended");
+  assert.match(text, /本局已結算/);
+  assert.ok(!text.includes("你這輪的詞"));
+  assert.match(text, /每人 \+10 分/);
 });
 
 test("MCP 默契考驗：觀眾工具經 HTTP 出題、文字摘要及原始題目信任提醒", async (context) => {
@@ -485,4 +491,48 @@ test("MCP 默契考驗：觀眾工具經 HTTP 出題、文字摘要及原始題�
   text = JSON.stringify(result.content);
   assert.match(text, /已交：阿童/);
   assert.ok(!text.includes("秘密答案"));
+});
+
+test("MCP 默契考驗：reviewing 與 ended 列整局回顧，不再提示本題作答", async (context) => {
+  const store = new MultiplayerTableStore(() => createDeck());
+  const host = await startAgentGameTableHost({ port: 0, store });
+  context.after(() => host.close());
+  const client = await connectMcp(new AgentGameTableHostClient(host.url), "quiz-round-summary", context);
+  const owner = store.createTable("阿童", { questions_per_round: 3, turn_seconds: 0 }, "syncquiz");
+  store.humanTakeSeat(owner.human_token, owner.table.version, "summary-owner-seat");
+  await client.callTool({ name: "join_table", arguments: { join_code: owner.table.join_code, agent_name: "小葵" } });
+  await seatVia(client, "summary-agent-seat");
+  let view = store.startRound(owner.human_token, store.getHumanView(owner.human_token).version, "summary-start-round");
+  const answers = [["熱湯", "熱湯"], ["豆漿", "紅茶"], ["玉兔", "月兔"]];
+  for (const [index, pair] of answers.entries()) {
+    view = store.humanAction(owner.human_token, "submit_answer", view.version, `summary-human-${index}`, [pair[0]!]);
+    const result = await client.callTool({ name: "take_action", arguments: { action: "submit_answer", cards: [pair[1]!], expected_version: view.version, idempotency_key: `summary-agent-${index}` } });
+    assert.equal(result.isError, undefined);
+    view = tableFrom(result);
+  }
+  assert.equal(view.board.phase, "reviewing");
+  const readText = async () => {
+    const result = await client.callTool({ name: "get_table_view", arguments: {} });
+    return (result.content as Array<{ text: string }>).map((item) => item.text).join("\n");
+  };
+  const assertReview = (text: string) => {
+    assert.ok(!text.includes("你這題的答案"));
+    assert.doesNotMatch(text, /^題目：/m);
+    for (let index = 1; index <= 3; index++) assert.match(text, new RegExp(`第 ${index} 題揭曉.*分組：`));
+    for (const answer of answers.flat()) assert.ok(text.includes(answer));
+  };
+  let text = await readText();
+  assertReview(text);
+  assert.match(text, /整局回顧：共 3 題，全員按結束本局才結算（已結束：無）/);
+  assert.match(text, /claim_same/);
+  view = store.humanAction(owner.human_token, "finish_round", view.version, "summary-human-finish");
+  text = await readText();
+  assertReview(text);
+  assert.match(text, /已結束：阿童/);
+  const result = await client.callTool({ name: "take_action", arguments: { action: "finish_round", expected_version: view.version, idempotency_key: "summary-agent-finish" } });
+  assert.equal(tableFrom(result).phase, "ended");
+  text = await readText();
+  assertReview(text);
+  assert.match(text, /本局已結算/);
+  assert.ok(!text.includes("全員按結束本局才結算"));
 });

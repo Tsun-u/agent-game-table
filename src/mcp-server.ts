@@ -628,17 +628,31 @@ function summarizeWordGame(table: PublicTableView): string {
     const chain = (board.chain ?? []) as { turn: number; words: Record<string, string | null> }[];
     const last = chain.at(-1);
     lines.push(last ? `上一輪揭曉（第 ${last.turn} 輪）：${showAnswers(last.words)}` : "上一輪尚未揭曉");
-    lines.push(`你這輪的詞：${board.your_word ?? "未交"}`);
+    if (board.phase === "ended" || table.phase === "ended") lines.push("本局已結算");
+    else lines.push(`你這輪的詞：${board.your_word ?? "未交"}`);
     const result = board.result as { matched: string; turn: number; points: number } | null;
     if (result) lines.push(`第 ${result.turn} 輪撞到『${result.matched}』，每人 +${result.points} 分`);
   } else {
-    lines.push(`第 ${board.question_index ?? 1} 題／共 ${board.total_questions ?? table.rule_options.questions_per_round} 題`);
-    const question = board.question as { text: string; author: string | null } | null;
-    lines.push(question ? `題目：${question.text}（${question.author === null ? "內建題目" : `題目來自 ${question.author}`}）` : "等觀眾出題");
     const history = (board.history ?? []) as { text: string; answers: Record<string, string | null>; groups: string[][] }[];
-    const last = history.at(-1);
-    lines.push(last ? `上一題揭曉「${last.text}」：${showAnswers(last.answers)}｜分組：${last.groups.map((group) => group.map(nameOf).join("、")).join("／") || "無"}` : "上一題尚未揭曉");
-    lines.push(`你這題的答案：${board.your_answer ?? "未交"}｜佇列還有 ${board.queue_length ?? 0} 題`);
+    if (board.phase === "reviewing" || board.phase === "ended" || table.phase === "ended") {
+      if (board.phase === "reviewing") {
+        const finished = table.players.filter((seat) => !table.pending_seat_ids.includes(seat.seat_id)).map((seat) => seat.name);
+        lines.push(`整局回顧：共 ${board.total_questions} 題，全員按結束本局才結算（已結束：${finished.join("、") || "無"}）`);
+      } else {
+        lines.push("本局已結算");
+      }
+      history.forEach((row, index) => {
+        lines.push(`第 ${index + 1} 題揭曉「${row.text}」：${showAnswers(row.answers)}｜分組：${row.groups.map((group) => group.map(nameOf).join("、")).join("／") || "無"}`);
+      });
+      lines.push(`佇列還有 ${board.queue_length ?? 0} 題`);
+    } else {
+      lines.push(`第 ${board.question_index ?? 1} 題／共 ${board.total_questions ?? table.rule_options.questions_per_round} 題`);
+      const question = board.question as { text: string; author: string | null } | null;
+      lines.push(question ? `題目：${question.text}（${question.author === null ? "內建題目" : `題目來自 ${question.author}`}）` : "等觀眾出題");
+      const last = history.at(-1);
+      lines.push(last ? `上一題揭曉「${last.text}」：${showAnswers(last.answers)}｜分組：${last.groups.map((group) => group.map(nameOf).join("、")).join("／") || "無"}` : "上一題尚未揭曉");
+      lines.push(`你這題的答案：${board.your_answer ?? "未交"}｜佇列還有 ${board.queue_length ?? 0} 題`);
+    }
   }
   const claim = board.claim as { by: string; answers?: string[]; votes: Record<string, "agree" | "reject"> } | null;
   if (board.phase === "judging" && claim) {
